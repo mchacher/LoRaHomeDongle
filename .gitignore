@@ -1,0 +1,12 @@
+.pio
+.pioenvs
+.piolibdeps
+.clang_complete
+.gcc-flags.json
+.DS_Store
+.vscode/*
+debug*.txt
+*.log
+lib/.DS_Store
+.DS_Store
+.DS_Store
