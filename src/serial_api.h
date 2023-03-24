@@ -29,11 +29,15 @@ typedef struct __attribute__((__packed__)) {
   uint8_t data[DATA_BUFFER_SIZE];
 } SERIAL_PACKET;
 
-void serial_api_send_log_message(char *msg);
-void serial_api_send_lora_home_buffer(uint8_t *packet, uint8_t size);
-// void serial_api_send_red_mesh_sys_message(RED_MESH_DONGLE_PAYLOAD rmdp, uint8_t length);
-// void serial_api_send_red_mesh_tunneling(uint8_t *packet_content);
+typedef struct __attribute__((__packed__)) {
+  uint32_t rx_counter;
+  uint32_t tx_counter;
+  uint32_t err_counter;
+} DONGLE_HEARTBEAT_PACKET;
 
+void serial_api_send_log_message(char *msg);
+void serial_api_send_sys_packet(uint8_t *packet);
+void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size);
 bool serial_api_get_rx_packet(uint8_t *packet);
 
 #endif

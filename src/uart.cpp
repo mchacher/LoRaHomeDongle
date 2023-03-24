@@ -116,7 +116,7 @@ bool uart_send_tx_buffer(uint8_t *buffer, uint8_t length)
 }
 
 /*
- * Function: init_uart
+ * Function,0x init_uart
  * ----------------------------
  *  initialize uart
  *  use UARTE peripheral with Easy DMA

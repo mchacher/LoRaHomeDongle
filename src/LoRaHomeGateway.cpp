@@ -5,7 +5,7 @@
 #include "Configuration_LoRaHome.h"
 #include "serial_api.h"
 
-#define DEBUG_ESP_PORT Serial
+//#define DEBUG_ESP_PORT Serial
 #ifdef DEBUG_ESP_PORT
 #define DEBUG_MSG(...) DEBUG_ESP_PORT.printf(__VA_ARGS__)
 #else
@@ -136,93 +136,9 @@ void LoRaHomeGateway::sendPacket(uint8_t *packet)
 }
 
 /**
- * @brief send a LoRaHome message and validate it with ack
- * @param mqttJsonMsg
- *
- */
-void LoRaHomeGateway::forwardMessageToNode(char *mqttJsonMsg)
-{
-  DEBUG_MSG("LoRaHomeGateway::forwardMessageToNode\n");
-  uint8_t retry = 0;
-  uint8_t ackBuffer[LH_FRAME_ACK_SIZE];
-  // TODO check how to define the right size
-  StaticJsonDocument<LH_MQTT_MSG_MAX_SIZE * 2> jsonDoc;
-  DeserializationError error = deserializeJson(jsonDoc, mqttJsonMsg);
-  if (error)
-  {
-    DEBUG_MSG("--- mqtt message / deserialization error");
-    return;
-  }
-  if (jsonDoc[JSON_KEY_NODE_NAME].isNull() == true)
-  {
-    DEBUG_MSG("--- invalid MQTT JSON message / node recipent node specified");
-    return;
-  }
-  // create a LoRaHomeFrame
-  LoRaHomeFrame lhf;
-  uint8_t nodeIdRecipient = jsonDoc[JSON_KEY_NODE_NAME];
-  uint8_t counter = lhfTxCounter++;
-  lhf.networkID = MY_NETWORK_ID;
-  lhf.nodeIdEmitter = LH_NODE_ID_GATEWAY;
-  lhf.messageType = LH_MSG_TYPE_GW_MSG_ACK;
-  lhf.nodeIdRecipient = nodeIdRecipient;
-  lhf.counter = counter;
-  jsonDoc.remove(JSON_KEY_NODE_NAME);
-  serializeJson(jsonDoc, lhf.jsonPayload);
-  bool success = false;
-  // send the LoRaHome message and loop max retry if necessary
-  do
-  {
-    DEBUG_MSG("--- send msg, retry = %i\n", retry);
-    uint8_t txBuffer[LH_FRAME_MAX_SIZE];
-    DEBUG_MSG("--- msg to forward: ");
-    uint8_t size = lhf.serialize(txBuffer);
-    for (uint8_t i = 0; i < size; i++)
-    {
-      DEBUG_MSG("%i ", txBuffer[i]);
-    }
-    DEBUG_MSG("\n");
-    xQueueSend(txQueue, txBuffer, 0);
-
-    unsigned long ackStartWaitingTime = millis();
-    // loop until ACK_TIMEOUT expired or success
-    // while (((millis() - ackStartWaitingTime) < ACK_TIMEOUT) && (success == false))
-    // {
-    // add 100ms delay to give back the hand to the IDLE task
-    // vTaskDelay(100 / portTICK_PERIOD_MS);
-    // TODO : réfléchir à la bonne valeur de timeout
-    BaseType_t anymsg = xQueueReceive(rxAckQueue, ackBuffer, ACK_TIMEOUT / portTICK_PERIOD_MS);
-    if (pdTRUE == anymsg)
-    {
-      DEBUG_MSG("--- ack received\n");
-      LoRaHomeFrame lhfAck;
-      lhfAck.createFromRxMessage(ackBuffer, LH_FRAME_ACK_SIZE, false);
-      if ((lhfAck.nodeIdEmitter == nodeIdRecipient) && (lhfAck.counter == counter))
-      {
-        DEBUG_MSG("--- expected ack received\n");
-        ackStartWaitingTime = millis() - ackStartWaitingTime;
-        DEBUG_MSG("--- time to receive ack: %lu\n", ackStartWaitingTime);
-        success = true;
-      }
-      else
-      {
-        DEBUG_MSG("--- ack received is not the one expected - add it back to the queue\n");
-        // TODO: check what we should do to avoid losing an ack
-        // if we add it to the back of the queue and it is the only one, next loop we will get it again ...$
-        // on the other hand, since we pile tx requests, there should not be more than one Tx request at a time
-      }
-      // }
-    }
-    retry++;
-    // loop if ack not received
-  } while ((false == success) && (retry < MAX_RETRY_NO_VALID_ACK));
-  DEBUG_MSG("--- exit forwardMessageToNode, retry = %i\n", retry);
-}
-
-/**
  * @brief pop the LoRaHomeFrame if any available in the Rx message queue
  *
- * @param lhf the LoRaHomeFrame reference to be used to return the message
+ * @param rxBuffer the lora home packet
  * @return true if a message was available
  * @return false if no message available
  */
@@ -235,11 +151,6 @@ bool LoRaHomeGateway::popLoRaHomePayload(uint8_t *rxBuffer)
   BaseType_t anymsg = xQueueReceive(rxMsgQueue, rxBuffer, 0);
   if (pdTRUE == anymsg)
   {
-    DEBUG_MSG("LoRaHomeGateway::popLoRaHomePayload\n");
-    lastMsgProcessedTimeStamp = millis();
-    // frame has already been checked. So the message is valid, size can be computed
-    // uint8_t size = LH_FRAME_HEADER_SIZE + rxBuffer[LH_FRAME_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
-    // lhf.createFromRxMessage(rxBuffer, size, false);
     return true;
   }
   return false;
@@ -253,13 +164,15 @@ bool LoRaHomeGateway::popLoRaHomePayload(uint8_t *rxBuffer)
  */
 void LoRaHomeGateway::sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counter)
 {
-  // DEBUG_MSG("LoRaHomeGateway::sendAckToLoRaNode\n");
-  // DEBUG_MSG("--- recipient: %i\n", nodeIdRecipient);
-  // DEBUG_MSG("--- counter: %i\n", counter);
-  LoRaHomeFrame ackFrame(MY_NETWORK_ID, LH_NODE_ID_GATEWAY, nodeIdRecipient, LH_MSG_TYPE_GW_ACK, counter);
-  uint8_t txBuffer[LH_FRAME_MAX_SIZE];
-  ackFrame.serialize(txBuffer);
-  xQueueSend(txQueue, txBuffer, 0);
+  LORA_HOME_ACK ack_packet = {0};
+  ack_packet.header.counter = counter;
+  ack_packet.header.messageType = LH_MSG_TYPE_GW_ACK;
+  ack_packet.header.networkID = MY_NETWORK_ID;
+  ack_packet.header.nodeIdEmitter = LH_NODE_ID_GATEWAY;
+  ack_packet.header.nodeIdRecipient = nodeIdRecipient;
+  ack_packet.header.payloadSize = 0;
+  ack_packet.crc16 = crc16_ccitt((uint8_t *) &ack_packet, sizeof(LORA_HOME_PACKET_HEADER));
+  xQueueSend(txQueue, &ack_packet, 0);
 }
 
 /**
@@ -319,19 +232,19 @@ void LoRaHomeGateway::send()
   if (pdTRUE == anymsg)
   {
     txCounter++;
-    uint8_t size = LH_FRAME_HEADER_SIZE + txBuffer[LH_FRAME_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
+    uint8_t size = LH_FRAME_HEADER_SIZE + txBuffer[LH_PACKET_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
     txMode();
     LoRa.beginPacket();
-    // char log[256] = "\0";
+    //char log[256] = "\0";
     for (uint8_t i = 0; i < size; i++)
     {
       LoRa.write(txBuffer[i]);
-      // sprintf(log + strlen(log), "%02X:", txBuffer[i]);
+      //sprintf(log + strlen(log), "%02X:", txBuffer[i]);
     }
     LoRa.flush();
     LoRa.endPacket(false);
     rxMode();
-    // serial_api_send_log_message(log);
+    //serial_api_send_log_message(log);
   }
 }
 
@@ -371,11 +284,6 @@ void LoRaHomeGateway::onReceive(int packetSize)
 
   LORA_HOME_PACKET *packet;
   packet = (LORA_HOME_PACKET *)&rxMessage[0];
-  // DEBUG_MSG("--- Network ID: %X\n", packet->header.networkID);
-  // DEBUG_MSG("--- node ID emitter: %i\n", packet->header.nodeIdEmitter);
-  // DEBUG_MSG("--- node ID Recipient: %i\n", packet->header.nodeIdRecipient);
-  // DEBUG_MSG("--- counter: %i\n", packet->header.counter);
-  // DEBUG_MSG("--- message type: %i\n", packet->header.messageType);
 
   if ((packet->header.networkID == MY_NETWORK_ID) && ((packet->header.nodeIdRecipient == LH_NODE_ID_GATEWAY) || (packet->header.nodeIdRecipient == LH_NODE_ID_BROADCAST)))
   {
@@ -459,7 +367,7 @@ uint16_t LoRaHomeGateway::crc16_ccitt(const uint8_t *data, unsigned int data_len
  */
 bool LoRaHomeGateway::checkCRC(const uint8_t *packet, uint8_t length)
 {
-  DEBUG_MSG("LoRaHomeFrame::checkCRC\n");
+  DEBUG_MSG("LoRaHomeGateway::checkCRC\n");
   // check CRC - last 2 bytes should contain CRC16
   uint8_t lowCRC = packet[length - 2];
   uint8_t highCRC = packet[length - 1];

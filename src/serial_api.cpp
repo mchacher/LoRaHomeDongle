@@ -37,13 +37,12 @@ void serial_api_send_log_message(char *message)
 }
 
 /*
- * Function: serial_api_send_lora_buffer
+ * Function: serial_api_send_lora_packet
  * ----------------------------
  *  send a log message
- *  - type of the message: MSG_TYPE_LOG
- *  - * message: the message to send
+ *  - type of the message: SERIAL_MSG_TYPE_LORA_HOME
  */
-void serial_api_send_lora_home_buffer(uint8_t *packet, uint8_t size)
+void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size)
 {
   SERIAL_PACKET_HEADER sph = {0};
   sph.packet_id = _packet_id++;
@@ -54,6 +53,20 @@ void serial_api_send_lora_home_buffer(uint8_t *packet, uint8_t size)
   memcpy(sp.data, packet, size);
   uart_send_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
+
+
+void serial_api_send_lora_home_buffer(uint8_t *packet, uint8_t size)
+{
+  SERIAL_PACKET_HEADER sph = {0};
+  sph.packet_id = _packet_id++;
+  sph.type = SERIAL_MSG_TYPE_SYS;
+  sph.data_length = size;
+  SERIAL_PACKET sp = {0};
+  sp.header = sph;
+  memcpy(sp.data, packet, size);
+  uart_send_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
+}
+
 
 bool serial_api_get_rx_packet(uint8_t *packet)
 {
