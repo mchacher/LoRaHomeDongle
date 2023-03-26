@@ -46,30 +46,34 @@ void IRAM_ATTR resetModule()
 }
 #endif
 
-void task_lora_home(void *pvParameters)
+void task_lora_home_send(void *pvParameters)
 {
   SERIAL_PACKET *serial_packet; // Buffer to hold received messages
   LORA_HOME_PACKET *lora_packet;
   uint8_t rx_buffer[256];
+  while (1)
+  {
+    if (serial_api_get_lora_home_packet(rx_buffer))
+    {
+      serial_packet = (SERIAL_PACKET *)rx_buffer;
+      lora_packet = (LORA_HOME_PACKET *)serial_packet->data;
+      lhg.sendPacket((uint8_t *)lora_packet);
+      // char buffer[256] = "\0";
+      // for (int i = 0; i < serial_packet->header.data_length + sizeof(SERIAL_PACKET_HEADER); i++)
+      // {
+      //   sprintf(buffer + strlen(buffer), "%02x:", rx_buffer[i]);
+      // }
+      // serial_api_send_log_message(buffer);
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+}
+
+void task_lora_home_receive(void *pvParameters)
+{
   uint8_t packet[LH_FRAME_MAX_SIZE];
   while (1)
   {
-    if (uart_get_rx_buffer(rx_buffer))
-    {
-      serial_packet = (SERIAL_PACKET *)rx_buffer;
-      if (serial_packet->header.type == SERIAL_MSG_TYPE_LORA_HOME)
-      {
-        lora_packet = (LORA_HOME_PACKET *)serial_packet->data;
-        // lhg.txCounter++;
-        lhg.sendPacket((uint8_t *)lora_packet);
-        // char buffer[256] = "\0";
-        // for (int i = 0; i < serial_packet->header.data_length + sizeof(SERIAL_PACKET_HEADER); i++)
-        // {
-        //   sprintf(buffer + strlen(buffer), "%02x:", rx_buffer[i]);
-        // }
-        // serial_api_send_log_message(buffer);
-      }
-    }
     if (lhg.popLoRaHomePayload(packet))
     {
       LORA_HOME_PACKET *lhp = (LORA_HOME_PACKET *)packet;
@@ -121,6 +125,7 @@ void setup()
   display.showUsbStatus(false);
   display.showLoRaStatus(false);
   uart_init();
+  serial_api_init();
   display.showUsbStatus(true);
 
 #ifdef WATCHDOG
@@ -137,9 +142,10 @@ void setup()
   DEBUG_MSG("--- LoRa Init OK!\n");
   display.showLoRaStatus(true);
   DEBUG_MSG("Main Loop starting, run on Core %i\n\n", xPortGetCoreID());
-  xTaskCreate(task_lora_home, "task_lora_home", 2048, NULL, 1, &taskHandle);
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
   xTaskCreate(task_uart_tx, "task_uart_tx", 2048, NULL, 1, NULL);
+  xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, &taskHandle);
+  xTaskCreate(task_lora_home_receive, "task_lora_home_receive", 2048, NULL, 1, &taskHandle);
   xTimerDisplayRefresh = xTimerCreate("timer_hearbeat", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_hearbeat);
   xTimerStart(xTimerDisplayRefresh, 0);
 }

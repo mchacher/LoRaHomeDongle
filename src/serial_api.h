@@ -56,6 +56,8 @@ typedef struct __attribute__((__packed__))
 void serial_api_send_log_message(char *msg);
 void serial_api_send_sys_packet(uint8_t *packet, uint8_t size);
 void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size);
-bool serial_api_get_rx_packet(uint8_t *packet);
+bool serial_api_get_lora_home_packet(uint8_t *packet);
+bool serial_api_get_system_packet(uint8_t *packet);
+void serial_api_init(void);
 
 #endif
