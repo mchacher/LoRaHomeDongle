@@ -1,5 +1,5 @@
-#ifndef UART_H_
-#define UART_H_
+#ifndef UART_H
+#define UART_H
 
 
 
@@ -10,6 +10,7 @@
 #define UART_RX_BUFFER_SIZE 256
 #define UART_RX_FIFO_ITEMS 8
 #define UART_TX_BUFFER_SIZE  256
+#define UART_TX_FIFO_ITEMS 8
 
 // Flag bytes for byte stuffing
 // basic serial communication protocol with
@@ -30,7 +31,8 @@ typedef enum
 
 void uart_init();
 bool uart_get_rx_buffer(uint8_t *buffer);
-bool uart_send_tx_buffer(uint8_t *buffer, uint8_t length);
+bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length);
 void task_uart_rx(void *pvParameters);
+void task_uart_tx(void *pvParameters);
 
 #endif

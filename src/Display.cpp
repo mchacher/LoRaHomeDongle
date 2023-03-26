@@ -1,8 +1,8 @@
-#include <Display.h>
 #include <Arduino.h>
-#include <LoRaHomeGateway.h>
 #include <SPI.h>
 #include <U8x8lib.h>
+#include "display.h"
+#include "lora_home_gateway.h"
 
 // OLED Display pins configuration
 #define SSD1306_CLK     15
@@ -34,12 +34,12 @@ const char* TXT_TX_COUNTER ="*Tx  ";
 const char* TXT_ERR_COUNTER ="*Err ";
 const char* TXT_REFRESH_CURSOR = "-";
 
-// rxCounter - each time a LoRa message is received, counter is incremented
-uint32_t Display::rxCounter = 0;
-// txCounter - each time a LoRa message is sent out, counter is incremented
-uint32_t Display::txCounter = 0;
-// errorCounter - each time an error is triggered
-uint32_t Display::errorCounter = 0;
+// rx_counter - each time a LoRa message is received, counter is incremented
+uint32_t Display::rx_counter = 0;
+// tx_counter - each time a LoRa message is sent out, counter is incremented
+uint32_t Display::tx_counter = 0;
+// err_counter - each time an error is triggered
+uint32_t Display::err_counter = 0;
 
 /**
  * @brief Construct a new Display:: Display object
@@ -59,30 +59,30 @@ void Display::refresh()
 {
     static uint8_t cursor = 0;
 
-    if (this->rxCounter != lhg->rxCounter)
+    if (this->rx_counter != lhg->rx_counter)
     {
         u8x8.clearLine(DISPLAY_LINE_COUNTER_RX);
-        String msgRxCounter = TXT_RX_COUNTER;
-        msgRxCounter += lhg->rxCounter;
-        this->rxCounter = lhg->rxCounter;
-        u8x8.drawString(0, DISPLAY_LINE_COUNTER_RX, msgRxCounter.c_str());
+        String msg_rx_counter = TXT_RX_COUNTER;
+        msg_rx_counter += lhg->rx_counter;
+        this->rx_counter = lhg->rx_counter;
+        u8x8.drawString(0, DISPLAY_LINE_COUNTER_RX, msg_rx_counter.c_str());
     }
 
-    if (this->txCounter != lhg->txCounter)
+    if (this->tx_counter != lhg->tx_counter)
     {
         u8x8.clearLine(DISPLAY_LINE_COUNTER_TX);
-        String msgTxCounter = TXT_TX_COUNTER;
-        msgTxCounter += lhg->txCounter;
-        this->txCounter = lhg->txCounter;
-        u8x8.drawString(0, DISPLAY_LINE_COUNTER_TX, msgTxCounter.c_str());
+        String msg_tx_counter = TXT_TX_COUNTER;
+        msg_tx_counter += lhg->tx_counter;
+        this->tx_counter = lhg->tx_counter;
+        u8x8.drawString(0, DISPLAY_LINE_COUNTER_TX, msg_tx_counter.c_str());
     }
 
-    if (this->errorCounter != lhg->errorCounter)
+    if (this->err_counter != lhg->err_counter)
     {
         u8x8.clearLine(DISPLAY_LINE_COUNTER_ERROR);
         String msgError = TXT_ERR_COUNTER;
-        msgError += lhg->errorCounter;
-        this->errorCounter = lhg->errorCounter;
+        msgError += lhg->err_counter;
+        this->err_counter = lhg->err_counter;
         u8x8.drawString(0, DISPLAY_LINE_COUNTER_ERROR, msgError.c_str());
     }
     if (cursor > (MAX_CHARACTERS_LINE -1))
@@ -95,7 +95,7 @@ void Display::refresh()
 }
 
 /**
- * @brief initialize display
+ * @brief Initialize display
  * 
  */
 void Display::init()
@@ -109,7 +109,7 @@ void Display::init()
 /**
  * @brief Display LoRa connection status
  * 
- * @param status Status of the LoRa connection
+ * @param status Show status of the LoRa connection
  */
 void Display::showLoRaStatus(bool status)
 {
@@ -127,7 +127,7 @@ void Display::showLoRaStatus(bool status)
 /**
  * @brief Display Usb connection status
  * 
- * @param status Status of the LoRa connection
+ * @param status Show status of the USB connection
  */
 void Display::showUsbStatus(bool status)
 {

@@ -1,7 +1,7 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
-#include "LoRaHomeGateway.h"
+#include "lora_home_gateway.h"
 class Display
 {
 public:
@@ -14,9 +14,9 @@ public:
 
 private:
     LoRaHomeGateway *lhg;
-    static uint32_t rxCounter;
-    static uint32_t txCounter;
-    static uint32_t errorCounter;
+    static uint32_t rx_counter;
+    static uint32_t tx_counter;
+    static uint32_t err_counter;
 };
 
 #endif

@@ -9,22 +9,52 @@
 #include <uart.h>
 #include <esp_system.h>
 
-QueueHandle_t rxQueue;
+QueueHandle_t rx_uart_queue;
+QueueHandle_t tx_uart_queue;
 
 #define WHITE_LED 25
 
 /*
- * Function: get_uart_rx_buffer
+ * Function: uart_get_rx_buffer
  * ----------------------------
  */
 bool uart_get_rx_buffer(uint8_t *buffer)
 {
-  BaseType_t anymsg = xQueueReceive(rxQueue, buffer, 0);
+  BaseType_t anymsg = xQueueReceive(rx_uart_queue, buffer, 0);
   if (pdTRUE == anymsg)
   {
     return true;
   }
   return false;
+}
+
+/*
+ * Function: uart_put_tx_buffer
+ * ----------------------------
+ * send buffer over uart
+ */
+bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length)
+{
+  // if message is too long for tx drop it and return error
+  if (UART_TX_BUFFER_SIZE < length)
+  {
+    return false;
+  }
+  uint8_t tx_buffer[UART_TX_BUFFER_SIZE];
+  uint8_t index = 1;
+  tx_buffer[index++] = UART_FLAG_START;
+  for (int i = 0; i < length; i++)
+  {
+    if ((buffer[i] == UART_FLAG_START) || (buffer[i] == UART_FLAG_STOP) || (buffer[i] == UART_FLAG_ESC))
+    {
+      tx_buffer[index++] = UART_FLAG_ESC;
+    }
+    tx_buffer[index++] = buffer[i];
+  }
+  tx_buffer[index++] = UART_FLAG_STOP;
+  tx_buffer[0] = index;
+  xQueueSendToBack(tx_uart_queue, tx_buffer, 0);
+  return true;
 }
 
 /*
@@ -42,7 +72,7 @@ void task_uart_rx(void *pvParameters)
 
   while (1)
   {
-    // // a character has been received
+    // a character has been received
     if (Serial.available())
     {
       uint8_t receivedByte = Serial.read(); // Read the received byte
@@ -74,7 +104,7 @@ void task_uart_rx(void *pvParameters)
         else if (receivedByte == UART_FLAG_STOP)
         {
           // store message
-          xQueueSendToBack(rxQueue, &rx_buffer[0], 0);
+          xQueueSendToBack(rx_uart_queue, &rx_buffer[0], 0);
           i = 0;
           rx_state = RX_IDLE;
           // esc_next_byte = false;
@@ -89,34 +119,24 @@ void task_uart_rx(void *pvParameters)
   }
 }
 
-/*
- * Function: send_uart_tx_buffer
- * ----------------------------
- * send buffer over uart
- */
-bool uart_send_tx_buffer(uint8_t *buffer, uint8_t length)
+void task_uart_tx(void *pvParameters)
 {
-  // if message is too long for tx drop it and return error
-  if (UART_TX_BUFFER_SIZE < length)
+  uint8_t tx_buffer[UART_TX_BUFFER_SIZE];
+  while (1)
   {
-    return false;
-  }
-  Serial.write(UART_FLAG_START);
-  for (int i = 0; i < length; i++)
-  {
-    if ((buffer[i] == UART_FLAG_START) || (buffer[i] == UART_FLAG_STOP) || (buffer[i] == UART_FLAG_ESC))
+    BaseType_t anymsg = xQueueReceive(tx_uart_queue, tx_buffer, 0);
+    if (pdTRUE == anymsg)
     {
-      Serial.write(UART_FLAG_ESC);
+      for (int i = 1; i < tx_buffer[0]; i++)
+      Serial.write(tx_buffer[i]);
     }
-    Serial.write(buffer[i]);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
-  Serial.write(UART_FLAG_STOP);
-  Serial.flush();
-  return true;
 }
 
+
 /*
- * Function,0x init_uart
+ * Function init_uart
  * ----------------------------
  *  initialize uart
  *  use UARTE peripheral with Easy DMA
@@ -128,8 +148,7 @@ void uart_init(void)
   digitalWrite(WHITE_LED, LOW);
   while (!Serial)
     ;
-  // Create a queue to hold received messages
-  rxQueue = xQueueCreate(UART_RX_FIFO_ITEMS, UART_RX_BUFFER_SIZE * sizeof(uint8_t));
-  // Enable RX interrupt for Serial on GPIO pin rxPin (3)
-  // attachInterrupt(digitalPinToInterrupt(3), serial_Rx_ISR, RISING);
+  // Create a queue to hold messages
+  rx_uart_queue = xQueueCreate(UART_RX_FIFO_ITEMS, UART_RX_BUFFER_SIZE * sizeof(uint8_t));
+  tx_uart_queue = xQueueCreate(UART_TX_FIFO_ITEMS, UART_TX_BUFFER_SIZE * sizeof(uint8_t));
 }

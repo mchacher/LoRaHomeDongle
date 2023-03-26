@@ -1,6 +1,6 @@
 #include <Arduino.h>
-#include <serial_api.h>
-#include <uart.h>
+#include "serial_api.h"
+#include "uart.h"
 
 /*
  * Module: serial_api.c
@@ -33,7 +33,7 @@ void serial_api_send_log_message(char *message)
   SERIAL_PACKET sp = {0};
   sp.header = sph;
   memcpy(sp.data, message, strlen(message));
-  uart_send_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
+  uart_put_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
 
 /*
@@ -51,11 +51,11 @@ void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size)
   SERIAL_PACKET sp = {0};
   sp.header = sph;
   memcpy(sp.data, packet, size);
-  uart_send_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
+  uart_put_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
 
 
-void serial_api_send_lora_home_buffer(uint8_t *packet, uint8_t size)
+void serial_api_send_sys_packet(uint8_t *packet, uint8_t size)
 {
   SERIAL_PACKET_HEADER sph = {0};
   sph.packet_id = _packet_id++;
@@ -64,7 +64,7 @@ void serial_api_send_lora_home_buffer(uint8_t *packet, uint8_t size)
   SERIAL_PACKET sp = {0};
   sp.header = sph;
   memcpy(sp.data, packet, size);
-  uart_send_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
+  uart_put_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
 
 

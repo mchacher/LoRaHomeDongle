@@ -1,9 +1,10 @@
 #include <Arduino.h>
 #include <esp_system.h>
-#include <LoRaHomeGateway.h>
-#include <Display.h>
-#include <uart.h>
-#include <serial_api.h>
+#include "lora_home_gateway.h"
+#include "display.h"
+#include "uart.h"
+#include "serial_api.h"
+#include "dongle_configuration.h"
 
 // #define DEBUG_ESP_PORT Serial
 #ifdef DEBUG_ESP_PORT
@@ -13,11 +14,11 @@
 #endif
 
 // uncomment to activate the watchdog
-//#define WATCHDOG
+#define WATCHDOG
 // watchdog management
 #ifdef WATCHDOG
 // time in ms to trigger the watchdog
-const int wdtTimeout = 60000;
+const int wdtTimeout = 10000;
 hw_timer_t *timer = NULL;
 #endif
 
@@ -25,7 +26,7 @@ hw_timer_t *timer = NULL;
 #define DISPLAY_TIMEOUT_REFRESH 1000 // 1s
 
 // Display
-Display display(loraHomeGateway);
+Display display(lhg);
 
 // Tasks and Timers
 TaskHandle_t taskHandle = NULL;
@@ -45,7 +46,7 @@ void IRAM_ATTR resetModule()
 }
 #endif
 
-void task_lora_home_sender(void *pvParameters)
+void task_lora_home(void *pvParameters)
 {
   SERIAL_PACKET *serial_packet; // Buffer to hold received messages
   LORA_HOME_PACKET *lora_packet;
@@ -59,8 +60,8 @@ void task_lora_home_sender(void *pvParameters)
       if (serial_packet->header.type == SERIAL_MSG_TYPE_LORA_HOME)
       {
         lora_packet = (LORA_HOME_PACKET *)serial_packet->data;
-        // loraHomeGateway.txCounter++;
-        loraHomeGateway.sendPacket((uint8_t *)lora_packet);
+        // lhg.txCounter++;
+        lhg.sendPacket((uint8_t *)lora_packet);
         // char buffer[256] = "\0";
         // for (int i = 0; i < serial_packet->header.data_length + sizeof(SERIAL_PACKET_HEADER); i++)
         // {
@@ -68,9 +69,8 @@ void task_lora_home_sender(void *pvParameters)
         // }
         // serial_api_send_log_message(buffer);
       }
-      //
     }
-    if (loraHomeGateway.popLoRaHomePayload(packet))
+    if (lhg.popLoRaHomePayload(packet))
     {
       LORA_HOME_PACKET *lhp = (LORA_HOME_PACKET *)packet;
       uint8_t size = sizeof(LORA_HOME_PACKET_HEADER) + lhp->header.payloadSize; // + LH_FRAME_FOOTER_SIZE;
@@ -82,29 +82,27 @@ void task_lora_home_sender(void *pvParameters)
 
 /**
  * @brief refresh display every DISPLAY_TIMEOUT_REFRESH
- * pop lora home packet if any and forward it over the uart
  */
-// void task_lora_home_forwarder(void *pvParameters)
-// {
-//   uint8_t lora_packet[LH_FRAME_MAX_SIZE];
-//   while (1)
-//   {
-//     if (loraHomeGateway.popLoRaHomePayload(lora_packet))
-//     {
-//       LORA_HOME_PACKET *lhp = (LORA_HOME_PACKET *)lora_packet;
-//       uint8_t size = sizeof(LORA_HOME_PACKET_HEADER) + lhp->header.payloadSize; // + LH_FRAME_FOOTER_SIZE;
-//       serial_api_send_lora_home_buffer(lora_packet, size);
-//     }
-//     vTaskDelay(10 / portTICK_PERIOD_MS);
-//   }
-// }
-
-/**
- * @brief refresh display every DISPLAY_TIMEOUT_REFRESH
- */
-void timer_display_refresh(TimerHandle_t xTimer)
+void timer_hearbeat(TimerHandle_t xTimer)
 {
+  static unsigned long time = 0;
+#ifdef WATCHDOG
+  timerWrite(timer, 0);
+#endif
   display.refresh();
+  if (millis() - time > HEARBEAT_PERIOD)
+  {
+    DONGLE_HEARTBEAT_PACKET packet_heartbeat;
+    packet_heartbeat.err_counter = lhg.err_counter;
+    packet_heartbeat.rx_counter = lhg.rx_counter;
+    packet_heartbeat.tx_counter = lhg.tx_counter;
+    DONGLE_SYS_PACKET packet_sys;
+    packet_sys.sys_type = TYPE_SYS_HEARTBEAT;
+    // packet_sys.payload = (uint8_t *)&packet_heartbeat;
+    memcpy(packet_sys.payload, &packet_heartbeat, sizeof(DONGLE_HEARTBEAT_PACKET));
+    serial_api_send_sys_packet((uint8_t *)&packet_sys, sizeof(DONGLE_HEARTBEAT_PACKET) + sizeof(packet_sys.sys_type));
+    time = millis();
+  }
 }
 
 /**
@@ -135,14 +133,14 @@ void setup()
 
   // LoRa initialization
   display.showLoRaStatus(false);
-  loraHomeGateway.setup();
+  lhg.setup();
   DEBUG_MSG("--- LoRa Init OK!\n");
   display.showLoRaStatus(true);
   DEBUG_MSG("Main Loop starting, run on Core %i\n\n", xPortGetCoreID());
-  xTaskCreate(task_lora_home_sender, "task_lora_home_sender", 2048, NULL, 1, &taskHandle);
+  xTaskCreate(task_lora_home, "task_lora_home", 2048, NULL, 1, &taskHandle);
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
-  // xTaskCreate(task_lora_home_forwarder, "task_lora_home_forwarder", 2048, NULL, 1, NULL);
-  xTimerDisplayRefresh = xTimerCreate("Display Reflesh", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_display_refresh);
+  xTaskCreate(task_uart_tx, "task_uart_tx", 2048, NULL, 1, NULL);
+  xTimerDisplayRefresh = xTimerCreate("timer_hearbeat", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_hearbeat);
   xTimerStart(xTimerDisplayRefresh, 0);
 }
 
@@ -156,16 +154,5 @@ void setup()
  */
 void loop()
 {
-  static unsigned long time;
-  time = millis();
-
-#ifdef WATCHDOG
-  // reset timer (feed watchdog)
-  if ((time - loraHomeGateway.lastMsgProcessedTimeStamp) < wdtTimeout)
-  {
-    timerWrite(timer, 0);
-  }
-#endif
   vTaskDelay(pdMS_TO_TICKS(1000));
-
 }

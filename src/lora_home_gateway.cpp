@@ -1,9 +1,10 @@
-#include <LoRaHomeGateway.h>
+#include <lora_home_gateway.h>
 #include <ArduinoJson.h>
 #include <LoRa.h>
 #include "esp_task_wdt.h"
-#include "Configuration_LoRaHome.h"
+#include "lora_home_configuration.h"
 #include "serial_api.h"
+#include "dongle_configuration.h"
 
 //#define DEBUG_ESP_PORT Serial
 #ifdef DEBUG_ESP_PORT
@@ -15,43 +16,30 @@
 // White LED management of heltec_wifi_lora_32_V2 board
 #define LED_WHITE 25
 
-#define ACK_TIMEOUT 300          // 200ms max to receive an Ack
-#define MAX_RETRY_NO_VALID_ACK 3 // 3 retries max
 
-// for each node sending data
-// index = number of the node
-// [index] = value of last Tx
-uint8_t nodeTxCounterTable[255];
-
-// -------------------------------------------------------
-// LoRaHome CONFIGURATION
-// -------------------------------------------------------
-
-// incomig LoRa message queue
-QueueHandle_t LoRaHomeGateway::rxMsgQueue = xQueueCreate(5, LH_FRAME_MAX_SIZE * sizeof(uint8_t));
-// incoming LoRa ACK queue
-QueueHandle_t LoRaHomeGateway::rxAckQueue = xQueueCreate(5, LH_FRAME_ACK_SIZE * sizeof(uint8_t));
+// rx LoRa packet queue
+QueueHandle_t LoRaHomeGateway::rx_packet_queue = xQueueCreate(5, LH_FRAME_MAX_SIZE * sizeof(uint8_t));
+// rx LoRa ACK queue
+QueueHandle_t LoRaHomeGateway::rx_ack_packet_queue = xQueueCreate(5, LH_FRAME_ACK_SIZE * sizeof(uint8_t));
 // tx LoRa queue
-QueueHandle_t LoRaHomeGateway::txQueue = xQueueCreate(5, LH_FRAME_MAX_SIZE * sizeof(uint8_t));
+QueueHandle_t LoRaHomeGateway::tx_packet_queue = xQueueCreate(5, LH_FRAME_MAX_SIZE * sizeof(uint8_t));
 
 // if running on Core 1 - same as per Arduino Framework
 // if running on Core 2 - leverage dual core architecture of ESP32
-static int LoRaCore = 0;
-TaskHandle_t taskHandlerLoRa;
+static int lora_code = 0;
+TaskHandle_t task_lora;
 
-// rxCounter - each time a LoRa message is received, counter is incremented
-uint32_t LoRaHomeGateway::rxCounter = 0;
-// txCounter - each time a LoRa message is sent out, counter is incremented
-uint32_t LoRaHomeGateway::txCounter = 0;
-// errorCounter - each time an error is triggered
-uint32_t LoRaHomeGateway::errorCounter = 0;
+// rx_counter - each time a LoRa message is received, counter is incremented
+uint32_t LoRaHomeGateway::rx_counter = 0;
+// tx_counter - each time a LoRa message is sent out, counter is incremented
+uint32_t LoRaHomeGateway::tx_counter = 0;
+// err_counter - each time an error is triggered
+uint32_t LoRaHomeGateway::err_counter = 0;
 // counter used inside Tx LoRaHomeFrame
-uint16_t LoRaHomeGateway::lhfTxCounter = 0;
-// lastMsgProcessedTimeStamp - use to feed watchdog. Each time a message is received
-unsigned long LoRaHomeGateway::lastMsgProcessedTimeStamp = millis();
+uint16_t LoRaHomeGateway::packet_id_counter = 0;
+// time stamp of the last packet received
+unsigned long LoRaHomeGateway::last_packet_ts = millis();
 
-const char *JSON_KEY_NODE_NAME = "node";
-const char *JSON_KEY_TX_COUNTER = "#tx";
 
 /**
  * @brief Construct a new LoRaHomeGateway::LoRaHome object
@@ -98,8 +86,8 @@ void LoRaHomeGateway::setup()
       10000,            /* 10kBytes Stack size of task */
       NULL,             /* (void *)this->onReceive, parameter of the task */
       1,                /* priority of the task */
-      &taskHandlerLoRa, /* Task handler to keep track of created task */
-      LoRaCore);        /* pin task to core 0, default Arduino setup and main running on core 1 */
+      &task_lora, /* Task handler to keep track of created task */
+      lora_code);        /* pin task to core 0, default Arduino setup and main running on core 1 */
 
   // set in rx mode.
   this->rxMode();
@@ -119,8 +107,8 @@ void LoRaHomeGateway::sendPacket(uint8_t *packet)
   // send the LoRaHome raw_packet and loop max retry if necessary
   do
   {
-    xQueueSend(txQueue, raw_packet, 0);
-    BaseType_t anymsg = xQueueReceive(rxAckQueue, ackBuffer, pdMS_TO_TICKS(ACK_TIMEOUT));
+    xQueueSend(tx_packet_queue, raw_packet, 0);
+    BaseType_t anymsg = xQueueReceive(rx_ack_packet_queue, ackBuffer, pdMS_TO_TICKS(ACK_TIMEOUT));
     if (pdTRUE == anymsg)
     {
       LORA_HOME_PACKET *ack;
@@ -148,9 +136,10 @@ bool LoRaHomeGateway::popLoRaHomePayload(uint8_t *rxBuffer)
 
   // any LoRa message in the queue?
   // enter critical section to retrieve data in the queue
-  BaseType_t anymsg = xQueueReceive(rxMsgQueue, rxBuffer, 0);
+  BaseType_t anymsg = xQueueReceive(rx_packet_queue, rxBuffer, 0);
   if (pdTRUE == anymsg)
   {
+    last_packet_ts = millis();
     return true;
   }
   return false;
@@ -172,7 +161,7 @@ void LoRaHomeGateway::sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counte
   ack_packet.header.nodeIdRecipient = nodeIdRecipient;
   ack_packet.header.payloadSize = 0;
   ack_packet.crc16 = crc16_ccitt((uint8_t *) &ack_packet, sizeof(LORA_HOME_PACKET_HEADER));
-  xQueueSend(txQueue, &ack_packet, 0);
+  xQueueSend(tx_packet_queue, &ack_packet, 0);
 }
 
 /**
@@ -228,10 +217,10 @@ void LoRaHomeGateway::send()
 {
 
   uint8_t txBuffer[LH_FRAME_MAX_SIZE];
-  BaseType_t anymsg = xQueueReceive(txQueue, txBuffer, 0);
+  BaseType_t anymsg = xQueueReceive(tx_packet_queue, txBuffer, 0);
   if (pdTRUE == anymsg)
   {
-    txCounter++;
+    tx_counter++;
     uint8_t size = LH_FRAME_HEADER_SIZE + txBuffer[LH_PACKET_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
     txMode();
     LoRa.beginPacket();
@@ -251,17 +240,17 @@ void LoRaHomeGateway::send()
 /**
  * @brief LoRa callback function when packets are available
  * Sort out the incoming LoRa messages in the right Queue for later processing (message, ack)
- * @param packetSize number of bytes available
+ * @param packet_size number of bytes available
  */
-void LoRaHomeGateway::onReceive(int packetSize)
+void LoRaHomeGateway::onReceive(int packet_size)
 {
-  DEBUG_MSG("LoRaHomeGateway::onReceive: Packet Size = %i\n", packetSize);
-  // increment rxCounter - new message received
-  rxCounter++;
+  DEBUG_MSG("LoRaHomeGateway::onReceive: Packet Size = %i\n", packet_size);
+  // increment rx_counter - new message received
+  rx_counter++;
   // invalid packet - flush rx fifo and return
-  if ((packetSize > LH_FRAME_MAX_SIZE) || (packetSize < LH_FRAME_MIN_SIZE))
+  if ((packet_size > LH_FRAME_MAX_SIZE) || (packet_size < LH_FRAME_MIN_SIZE))
   {
-    for (int i = 0; i < packetSize; i++)
+    for (int i = 0; i < packet_size; i++)
     {
       LoRa.read();
     }
@@ -270,15 +259,15 @@ void LoRaHomeGateway::onReceive(int packetSize)
 
   uint8_t rxMessage[LH_FRAME_MAX_SIZE];
 
-  for (int i = 0; i < packetSize; i++)
+  for (int i = 0; i < packet_size; i++)
   {
     rxMessage[i] = (uint8_t)LoRa.read();
   }
 
-  if (!checkCRC(rxMessage, packetSize))
+  if (!checkCRC(rxMessage, packet_size))
   {
     DEBUG_MSG("--- Error: CRC NOT OK");
-    errorCounter++;
+    err_counter++;
     return;
   }
 
@@ -291,27 +280,26 @@ void LoRaHomeGateway::onReceive(int packetSize)
     switch (packet->header.messageType)
     {
     case LH_MSG_TYPE_NODE_MSG_ACK_REQ:
-      // TODO MCH réactiver la gestion de l'ACK
-      loraHomeGateway.sendAckToLoRaNode(packet->header.nodeIdEmitter, packet->header.counter);
+      lhg.sendAckToLoRaNode(packet->header.nodeIdEmitter, packet->header.counter);
 
       // if frame not already received (typically ack not received, and node resending)
       // add it to the queue, else drop it
       DEBUG_MSG("--- valid message requiring ACK, add it to the queue\n");
-      xQueueSend(rxMsgQueue, rxMessage, 0);
+      xQueueSend(rx_packet_queue, rxMessage, 0);
       break;
     case LH_MSG_TYPE_NODE_MSG_NO_ACK_REQ:
       DEBUG_MSG("--- valid STANDARD message, add it to the queue\n");
-      xQueueSend(rxMsgQueue, rxMessage, 0);
+      xQueueSend(rx_packet_queue, rxMessage, 0);
       break;
     case LH_MSG_TYPE_NODE_ACK:
-      if (packetSize != LH_FRAME_ACK_SIZE)
+      if (packet_size != LH_FRAME_ACK_SIZE)
       {
         // DEBUG_MSG("--- ACK message length not valid\n");
       }
       else
       {
         // DEBUG_MSG("--- ACK message, add it to the queue - msg\n");
-        xQueueSend(rxAckQueue, rxMessage, 0);
+        xQueueSend(rx_ack_packet_queue, rxMessage, 0);
       }
       break;
     case LH_MSG_TYPE_GW_ACK:
@@ -319,7 +307,7 @@ void LoRaHomeGateway::onReceive(int packetSize)
       break;
     default:
       // DEBUG_MSG("--- unknown message type. Shall be an error\n");
-      errorCounter++;
+      err_counter++;
       break;
     }
   }
@@ -386,4 +374,4 @@ bool LoRaHomeGateway::checkCRC(const uint8_t *packet, uint8_t length)
   return true;
 }
 
-LoRaHomeGateway loraHomeGateway;
+LoRaHomeGateway lhg;
