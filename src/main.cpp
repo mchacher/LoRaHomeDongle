@@ -5,6 +5,9 @@
 #include "uart.h"
 #include "serial_api.h"
 #include "dongle_configuration.h"
+#include "lora_home_configuration.h"
+#include "data_storage.h"
+
 
 // #define DEBUG_ESP_PORT Serial
 #ifdef DEBUG_ESP_PORT
@@ -32,6 +35,9 @@ Display display(lhg);
 TaskHandle_t taskHandle = NULL;
 TimerHandle_t xTimerDisplayRefresh = NULL;
 
+//
+DataStorage data_storage;
+
 #ifdef WATCHDOG
 /**
  * brief watchdog Callback
@@ -46,6 +52,59 @@ void IRAM_ATTR resetModule()
 }
 #endif
 
+void task_sys_dongle(void *pvParameters)
+{
+  SERIAL_PACKET *serial_packet;
+  uint8_t rx_buffer[256];
+  while (1)
+  {
+    if (serial_api_get_sys_dongle_packet(rx_buffer))
+    {
+      serial_packet = (SERIAL_PACKET *)rx_buffer;
+      DONGLE_SYS_PACKET *sys_packet;
+      sys_packet = (DONGLE_SYS_PACKET *)serial_packet->data;
+      LORA_CONFIGURATION *lc;
+      // char buffer[256] = "\nTask_sys_dongle:";
+      switch (sys_packet->sys_type)
+      {
+      case TYPE_SYS_SET_LORA_SETTINGS:
+        lc = (LORA_CONFIGURATION *)sys_packet->payload;
+        data_storage.set_lora_configuration(lc);
+        // sprintf(buffer + strlen(buffer), "\n - Channel = %i", lc->channel);
+        // sprintf(buffer + strlen(buffer), "\n - Bandwidth = %i", lc->bandwidth);
+        // sprintf(buffer + strlen(buffer), "\n - Coding Rage = %i", lc->coding_rate);
+        // sprintf(buffer + strlen(buffer), "\n - Spreading Factor = %i", lc->spreading_factor);
+        // serial_api_send_log_message(buffer);
+        lhg.disable();
+        lhg.setup(lc);
+        break;
+      case TYPE_SYS_RESET:
+        esp_restart();
+        break;
+      case TYPE_SYS_GET_ALL_SETTINGS:
+        // sprintf(buffer + strlen(buffer), " sending all settings");
+        // serial_api_send_log_message(buffer);
+        DONGLE_ALL_SETTINGS_PACKET packet_settings;
+        packet_settings.version_major = VERSION_MAJOR;
+        packet_settings.version_minor = VERSION_MINOR;
+        packet_settings.version_patch = VERSION_PATCH;
+        packet_settings.lora_config = data_storage.get_lora_configuration();
+        DONGLE_SYS_PACKET packet;
+        packet.sys_type = TYPE_SYS_INFO_ALL_SETTINGS;
+        memcpy(packet.payload, &packet_settings, sizeof(DONGLE_ALL_SETTINGS_PACKET));
+        serial_api_send_sys_packet((uint8_t *)&packet, + sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET));
+      }
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+}
+
+/**
+ * brief task_lora_home_send
+ *
+ * forward lora home packet received over the UART on the air
+ *
+ */
 void task_lora_home_send(void *pvParameters)
 {
   SERIAL_PACKET *serial_packet; // Buffer to hold received messages
@@ -119,7 +178,11 @@ void timer_hearbeat(TimerHandle_t xTimer)
  */
 void setup()
 {
-  // Display initialization
+  //
+  data_storage.init();
+  data_storage.load_configuration();
+  // data_storage.save_lora_configuration();
+  //  Display initialization
   display.init();
   // UART initialization
   display.showUsbStatus(false);
@@ -138,14 +201,16 @@ void setup()
 
   // LoRa initialization
   display.showLoRaStatus(false);
-  lhg.setup();
+  LORA_CONFIGURATION lc = data_storage.get_lora_configuration();
+  lhg.setup(&lc);
   DEBUG_MSG("--- LoRa Init OK!\n");
   display.showLoRaStatus(true);
   DEBUG_MSG("Main Loop starting, run on Core %i\n\n", xPortGetCoreID());
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
   xTaskCreate(task_uart_tx, "task_uart_tx", 2048, NULL, 1, NULL);
-  xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, &taskHandle);
-  xTaskCreate(task_lora_home_receive, "task_lora_home_receive", 2048, NULL, 1, &taskHandle);
+  xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, NULL);
+  xTaskCreate(task_lora_home_receive, "task_lora_home_receive", 2048, NULL, 1, NULL);
+  xTaskCreate(task_sys_dongle, "task_sys_dongle", 2048, NULL, 1, NULL);
   xTimerDisplayRefresh = xTimerCreate("timer_hearbeat", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_hearbeat);
   xTimerStart(xTimerDisplayRefresh, 0);
 }

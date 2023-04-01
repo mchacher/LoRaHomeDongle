@@ -2,6 +2,7 @@
 #define LORA_HOME_GATEWAY_H
 
 #include "lora_home_packet.h"
+#include "lora_home_configuration.h"
 
 const uint8_t LH_MQTT_MSG_MAX_SIZE = 128; // to align with MQTT_MAX_PACKET_SIZE in PubSubClient 
 
@@ -13,10 +14,9 @@ class LoRaHomeGateway
 
 public:
     LoRaHomeGateway();
-    void setup();
+    void setup(LORA_CONFIGURATION *lc);
     void sendPacket(uint8_t *packet);
     void forwardMessageToNode(char *mqttJsonMsg);
-    //bool popLoRaHomePayload(LoRaHomeFrame& lhp);
     bool popLoRaHomePayload(uint8_t *rxBuffer);
     void sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counter);
     void enable();

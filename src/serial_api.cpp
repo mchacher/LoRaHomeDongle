@@ -95,6 +95,16 @@ bool serial_api_get_lora_home_packet(uint8_t *packet)
   return false;
 }
 
+bool serial_api_get_sys_dongle_packet(uint8_t *packet)
+{
+  BaseType_t anymsg = xQueueReceive(sys_packet_queue, packet, 0);
+  if (pdTRUE == anymsg)
+  {
+    return true;
+  }
+  return false;
+}
+
 void serial_api_init(void)
 {
   // Create a queue to hold messages

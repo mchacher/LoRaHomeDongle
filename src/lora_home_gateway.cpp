@@ -53,7 +53,7 @@ LoRaHomeGateway::LoRaHomeGateway()
  * @brief setup LoRaHome
  *
  */
-void LoRaHomeGateway::setup()
+void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc)
 {
   DEBUG_MSG("LoRaHomeGateway::setup\n");
   // configure Pinout for white LED
@@ -61,19 +61,18 @@ void LoRaHomeGateway::setup()
   // setup LoRa transceiver module
   LoRa.setPins(SS, RST, DIO0);
   DEBUG_MSG("--- LoRa.begin ... \n");
-  while (!LoRa.begin(LORA_FREQUENCY))
+  while (!LoRa.begin(lc->channel))
   {
     delay(500);
   }
   DEBUG_MSG("--- LoRa.begin ... done\n");
 
-  LoRa.setSpreadingFactor(LORA_SPREADING_FACTOR);
-  LoRa.setSignalBandwidth(LORA_SIGNAL_BANDWIDTH);
-  LoRa.setCodingRate4(LORA_CODING_RATE_DENOMINATOR);
+  LoRa.setSpreadingFactor(lc->spreading_factor);
+  LoRa.setSignalBandwidth(lc->bandwidth);
+  LoRa.setCodingRate4(lc->coding_rate);
   // Change sync word (0xF3) to match the receiver
-  // The sync word assures you don't get LoRa messages from other LoRa transceivers
   // ranges from 0-0xFF
-  LoRa.setSyncWord(LORA_SYNC_WORD);
+  // LoRa.setSyncWord(LORA_SYNC_WORD);
   LoRa.enableCrc();
 
   // set callback handler for LoRa message
