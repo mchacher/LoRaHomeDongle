@@ -39,7 +39,8 @@ uint32_t LoRaHomeGateway::err_counter = 0;
 uint16_t LoRaHomeGateway::packet_id_counter = 0;
 // time stamp of the last packet received
 unsigned long LoRaHomeGateway::last_packet_ts = millis();
-
+// network id
+uint16_t LoRaHomeGateway::network_id = 0;
 
 /**
  * @brief Construct a new LoRaHomeGateway::LoRaHome object
@@ -53,11 +54,13 @@ LoRaHomeGateway::LoRaHomeGateway()
  * @brief setup LoRaHome
  *
  */
-void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc)
+void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc, uint16_t network_id)
 {
   DEBUG_MSG("LoRaHomeGateway::setup\n");
   // configure Pinout for white LED
   pinMode(LED_WHITE, OUTPUT);
+  // set network id
+  this->network_id = network_id;
   // setup LoRa transceiver module
   LoRa.setPins(SS, RST, DIO0);
   DEBUG_MSG("--- LoRa.begin ... \n");
@@ -90,6 +93,11 @@ void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc)
 
   // set in rx mode.
   this->rxMode();
+}
+
+void LoRaHomeGateway::setNetworkID(uint16_t network_id)
+{
+  this->network_id = network_id;
 }
 
 void LoRaHomeGateway::sendPacket(uint8_t *packet)
@@ -155,7 +163,7 @@ void LoRaHomeGateway::sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counte
   LORA_HOME_ACK ack_packet = {0};
   ack_packet.header.counter = counter;
   ack_packet.header.messageType = LH_MSG_TYPE_GW_ACK;
-  ack_packet.header.networkID = MY_NETWORK_ID;
+  ack_packet.header.networkID = this->network_id;
   ack_packet.header.nodeIdEmitter = LH_NODE_ID_GATEWAY;
   ack_packet.header.nodeIdRecipient = nodeIdRecipient;
   ack_packet.header.payloadSize = 0;
@@ -273,7 +281,7 @@ void LoRaHomeGateway::onReceive(int packet_size)
   LORA_HOME_PACKET *packet;
   packet = (LORA_HOME_PACKET *)&rxMessage[0];
 
-  if ((packet->header.networkID == MY_NETWORK_ID) && ((packet->header.nodeIdRecipient == LH_NODE_ID_GATEWAY) || (packet->header.nodeIdRecipient == LH_NODE_ID_BROADCAST)))
+  if ((packet->header.networkID == network_id) && ((packet->header.nodeIdRecipient == LH_NODE_ID_GATEWAY) || (packet->header.nodeIdRecipient == LH_NODE_ID_BROADCAST)))
   {
     // analyse the message type (ack or standard)
     switch (packet->header.messageType)

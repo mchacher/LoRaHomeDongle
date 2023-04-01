@@ -10,9 +10,12 @@ public:
     void init();
     void load_configuration();
     LORA_CONFIGURATION get_lora_configuration();
+    uint16_t get_lora_home_network_id();
+    void set_lora_home_network_id(uint16_t value);
     void set_lora_configuration(LORA_CONFIGURATION *lc);
-    void save_lora_configuration();
+
 private:
+    void save_configuration();
 
 };
 

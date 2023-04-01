@@ -19,6 +19,7 @@ const char *KEY_CH = "K_CH";
 const char *KEY_BW = "K_BW";
 const char *KEY_SF = "K_SF";
 const char *KEY_CR = "K_CR";
+const char *KEY_NID = "K_NID";
 
 LORA_CONFIGURATION lora_config = {
     .channel = CH_NONE,
@@ -31,6 +32,10 @@ const LORA_CONFIGURATION lora_default_config = {
     .bandwidth = BW_125KHZ,
     .spreading_factor = SF_7,
     .coding_rate = CR_5};
+
+uint16_t lora_home_network_id = 0;
+
+const uint16_t default_network_id = 0xACDC;
 
 DataStorage::DataStorage()
 {
@@ -46,7 +51,7 @@ void DataStorage::init()
 }
 
 /**
- * @brief 
+ * @brief
  *
  */
 void DataStorage::load_configuration()
@@ -70,7 +75,7 @@ void DataStorage::load_configuration()
     {
         lora_config.bandwidth = lora_default_config.bandwidth;
     }
-    
+
     Lora_Spreading_Factor sf = (Lora_Spreading_Factor)prefs.getUInt(KEY_SF, 0);
     if (sf != 0)
     {
@@ -89,16 +94,35 @@ void DataStorage::load_configuration()
     {
         lora_config.coding_rate = lora_default_config.coding_rate;
     }
+    uint16_t n_id = prefs.getUShort(KEY_NID, 0);
+    if (n_id != 0)
+    {
+        lora_home_network_id = n_id;
+    }
+    else
+    {
+        lora_home_network_id = default_network_id;
+    }
 }
 
-void DataStorage::save_lora_configuration()
+uint16_t DataStorage::get_lora_home_network_id()
+{
+    return lora_home_network_id;
+}
+void DataStorage::set_lora_home_network_id(uint16_t value)
+{
+    lora_home_network_id = value;
+    this->save_configuration();
+}
+
+void DataStorage::save_configuration()
 {
     prefs.putUInt(KEY_CH, lora_config.channel);
     prefs.putUInt(KEY_BW, lora_config.bandwidth);
     prefs.putUInt(KEY_SF, lora_config.spreading_factor);
     prefs.putUInt(KEY_CR, lora_config.coding_rate);
+    prefs.putUShort(KEY_NID, lora_home_network_id);
 }
-
 
 void DataStorage::set_lora_configuration(LORA_CONFIGURATION *lc)
 {
@@ -106,9 +130,8 @@ void DataStorage::set_lora_configuration(LORA_CONFIGURATION *lc)
     lora_config.bandwidth = lc->bandwidth;
     lora_config.spreading_factor = lc->spreading_factor;
     lora_config.coding_rate = lc->coding_rate;
-    this->save_lora_configuration();
+    this->save_configuration();
 }
-
 
 /**
  * @brief setup persistent data management while reserving a datasone in NSV

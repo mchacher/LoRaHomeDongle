@@ -76,7 +76,7 @@ void task_sys_dongle(void *pvParameters)
         // sprintf(buffer + strlen(buffer), "\n - Spreading Factor = %i", lc->spreading_factor);
         // serial_api_send_log_message(buffer);
         lhg.disable();
-        lhg.setup(lc);
+        lhg.setup(lc, data_storage.get_lora_home_network_id());
         break;
       case TYPE_SYS_RESET:
         esp_restart();
@@ -89,10 +89,19 @@ void task_sys_dongle(void *pvParameters)
         packet_settings.version_minor = VERSION_MINOR;
         packet_settings.version_patch = VERSION_PATCH;
         packet_settings.lora_config = data_storage.get_lora_configuration();
+        packet_settings.lora_home_network_id = data_storage.get_lora_home_network_id();
         DONGLE_SYS_PACKET packet;
         packet.sys_type = TYPE_SYS_INFO_ALL_SETTINGS;
         memcpy(packet.payload, &packet_settings, sizeof(DONGLE_ALL_SETTINGS_PACKET));
         serial_api_send_sys_packet((uint8_t *)&packet, + sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET));
+        break;
+      case TYPE_SYS_SET_LORA_HOME_NETWORK_ID:      
+        uint16_t *value = (uint16_t *)sys_packet->payload;
+        // sprintf(buffer + strlen(buffer), " network_id = %02x", *value);
+        // serial_api_send_log_message(buffer);
+        data_storage.set_lora_home_network_id(*value);
+        lhg.setNetworkID(*value);
+        break;
       }
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -202,7 +211,7 @@ void setup()
   // LoRa initialization
   display.showLoRaStatus(false);
   LORA_CONFIGURATION lc = data_storage.get_lora_configuration();
-  lhg.setup(&lc);
+  lhg.setup(&lc, MY_NETWORK_ID);
   DEBUG_MSG("--- LoRa Init OK!\n");
   display.showLoRaStatus(true);
   DEBUG_MSG("Main Loop starting, run on Core %i\n\n", xPortGetCoreID());

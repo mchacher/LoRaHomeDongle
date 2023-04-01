@@ -14,13 +14,14 @@ class LoRaHomeGateway
 
 public:
     LoRaHomeGateway();
-    void setup(LORA_CONFIGURATION *lc);
+    void setup(LORA_CONFIGURATION *lc, uint16_t network_id);
     void sendPacket(uint8_t *packet);
     void forwardMessageToNode(char *mqttJsonMsg);
     bool popLoRaHomePayload(uint8_t *rxBuffer);
     void sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counter);
     void enable();
     void disable();
+    void setNetworkID(uint16_t network_id);
 
 
 private:
@@ -42,6 +43,7 @@ private:
     static QueueHandle_t rx_ack_packet_queue;
     static QueueHandle_t tx_packet_queue; 
     static uint16_t packet_id_counter;
+    static uint16_t network_id;
 };
 
 extern LoRaHomeGateway lhg;

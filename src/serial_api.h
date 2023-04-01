@@ -34,6 +34,7 @@ typedef enum
   TYPE_SYS_SET_LORA_SETTINGS = 4,
   TYPE_SYS_GET_ALL_SETTINGS = 5,
   TYPE_SYS_INFO_ALL_SETTINGS = 6,
+  TYPE_SYS_SET_LORA_HOME_NETWORK_ID = 7,
   TYPE_SYS_RESET = 254
 } TYPE_SYS;
 
@@ -56,6 +57,7 @@ typedef struct __attribute__((__packed__))
   uint8_t version_minor;
   uint8_t version_patch;
   LORA_CONFIGURATION lora_config;
+  uint16_t lora_home_network_id;
 } DONGLE_ALL_SETTINGS_PACKET;
 
 void serial_api_send_log_message(char *msg);
