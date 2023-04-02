@@ -1,18 +1,15 @@
 # LoRa2MQTT
 
 ## Contents
-- [Whats is LoRa2MQTT?](#What-is-LoRa2MQTT)
-- [Usage and installation](#about-lora)
-- [References](#references)
+- [Whats is LoRaHomeDongle?](#What-is-LoRaHomeDongle?)
+<!-- - [Usage and installation](#about-lora)
+- [References](#references) -->
 
-## What is LoRa2MQTT?
+## What is LoRaHomeDongle?
 
-LoRa2MQTT is a "LoRa to MQTT" gateway simplifying the integration of LoRa based sensors or actuators while bridging them to MQTT.
-
-LoRa2MQTT streamlines the design and user experience of LoRa based solutions. Makers who enjoy designing long range, low power sensors or actuators with LoRa technology can leverage LoRa2MQTT to connect their nodes to any systems supporting MQTT.
-
-To ease the design of the sensors, one can refer to the following [LoRaNode](https://github.com/mchacher/LoRaNode) library.
-
+LoRaHomeDongle is managing LoRa downstream communication of a LoRaHome network.
+It is intended to be used with LoRa2MQTTpy service.
+<!-- 
 ### About LoRa ###
 
 Users, geeks, makers are commonly facing communication distance issue when integrating  short-range based technology into their sensors or actuators (Bluetooth, Zigbee or Z Wave). [LoRa technology](https://en.wikipedia.org/wiki/LoRa) is great to overcome this issue, while still being power efficient.
@@ -79,4 +76,4 @@ A big thank you to all the authors:
 - [pubsubclient](https://github.com/knolleary/pubsubclient). Author @knolleary
 - [ArduinoJson](https://github.com/bblanchon/ArduinoJson). Author @bblanchon
 - [WiFiManager](https://github.com/tzapu/WiFiManager). Author @tzapu
-# LoRaHomeDongle
+# LoRaHomeDongle -->
