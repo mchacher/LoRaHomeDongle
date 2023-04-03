@@ -16,6 +16,7 @@ QueueHandle_t tx_uart_queue;
 
 /*
  * Function: uart_get_rx_buffer
+ * return rx buffer is any available in the rx queue
  * ----------------------------
  */
 bool uart_get_rx_buffer(uint8_t *buffer)
@@ -31,12 +32,13 @@ bool uart_get_rx_buffer(uint8_t *buffer)
 /*
  * Function: uart_put_tx_buffer
  * ----------------------------
- * send buffer over uart
+ * push a buffer to tx queue. Add byte stuffing prior to pushing it to the queue.
  */
 bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length)
 {
   // if message is too long for tx drop it and return error
-  if (UART_TX_BUFFER_SIZE < length)
+  // max size is UART_TX_BUFFER_SIZE -2, since at least START and STOP bytes will be added
+  if ((UART_TX_BUFFER_SIZE -2) < length)
   {
     return false;
   }
@@ -50,6 +52,11 @@ bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length)
       tx_buffer[index++] = UART_FLAG_ESC;
     }
     tx_buffer[index++] = buffer[i];
+    // return if index > UART_TX_BUFFER_SIZE
+    if (index > (UART_TX_BUFFER_SIZE -1))
+    {
+      return false;
+    }
   }
   tx_buffer[index++] = UART_FLAG_STOP;
   tx_buffer[0] = index;
@@ -61,6 +68,7 @@ bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length)
  * Function: task_uart_rx
  * ----------------------------
  * uart rx task
+ * decode incoming message and push it to rx queue
  */
 void task_uart_rx(void *pvParameters)
 {
@@ -119,6 +127,13 @@ void task_uart_rx(void *pvParameters)
   }
 }
 
+/*
+ * Function task_uart_tx
+ * ----------------------------
+ *  task managed by FreeRTOS
+ *  check whether there is a buffer to be sent out in the tx queue
+ *  send it if any
+ */
 void task_uart_tx(void *pvParameters)
 {
   uint8_t tx_buffer[UART_TX_BUFFER_SIZE];
@@ -139,7 +154,7 @@ void task_uart_tx(void *pvParameters)
  * Function init_uart
  * ----------------------------
  *  initialize uart
- *  use UARTE peripheral with Easy DMA
+ *  create rx and tx queue and initialized WHITE_LED as activity led
  */
 void uart_init(void)
 {
