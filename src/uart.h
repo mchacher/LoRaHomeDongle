@@ -1,12 +1,6 @@
 #ifndef UART_H
 #define UART_H
 
-
-
-// FIFO size is RX_FIFO_ITEMS x UART_RX_BUF_SIZE
-// #define TX_FIFO_ITEMS 8
-
-
 #define UART_RX_BUFFER_SIZE 256
 #define UART_RX_FIFO_ITEMS 8
 #define UART_TX_BUFFER_SIZE  256
