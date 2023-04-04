@@ -1,3 +1,10 @@
+/**
+ * @file main.cpp
+ * @author mchacher
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
 #include <Arduino.h>
 #include <esp_system.h>
 #include "lora_home_gateway.h"
@@ -7,14 +14,8 @@
 #include "dongle_configuration.h"
 #include "lora_home_configuration.h"
 #include "data_storage.h"
+#include "version.h"
 
-
-// #define DEBUG_ESP_PORT Serial
-#ifdef DEBUG_ESP_PORT
-#define DEBUG_MSG(...) DEBUG_ESP_PORT.printf(__VA_ARGS__)
-#else
-#define DEBUG_MSG(...)
-#endif
 
 // uncomment to activate the watchdog
 #define WATCHDOG
@@ -30,28 +31,31 @@ hw_timer_t *timer = NULL;
 
 // Display
 Display display(lhg);
+DataStorage data_storage;
 
 // Tasks and Timers
 TaskHandle_t taskHandle = NULL;
 TimerHandle_t xTimerDisplayRefresh = NULL;
 
-//
-DataStorage data_storage;
+
 
 #ifdef WATCHDOG
+
 /**
- * brief watchdog Callback
- *
- * restart module if called
- *
+ * @brief watchdog Callback
+ * restart esp if triggered
  */
 void IRAM_ATTR resetModule()
 {
-  DEBUG_MSG("Watchdog triggering reboot\n");
   esp_restart();
 }
 #endif
 
+/**
+ * @brief FreeRTOS task
+ * process incoming system packets on the UART
+ * @param pvParameters not used
+ */
 void task_sys_dongle(void *pvParameters)
 {
   SERIAL_PACKET *serial_packet;
@@ -84,7 +88,7 @@ void task_sys_dongle(void *pvParameters)
       case TYPE_SYS_GET_ALL_SETTINGS:
         // sprintf(buffer + strlen(buffer), " sending all settings");
         // serial_api_send_log_message(buffer);
-        DONGLE_ALL_SETTINGS_PACKET packet_settings;
+        DONGLE_ALL_SETTINGS_PACKET_PAYLOAD packet_settings;
         packet_settings.version_major = VERSION_MAJOR;
         packet_settings.version_minor = VERSION_MINOR;
         packet_settings.version_patch = VERSION_PATCH;
@@ -92,8 +96,8 @@ void task_sys_dongle(void *pvParameters)
         packet_settings.lora_home_network_id = data_storage.get_lora_home_network_id();
         DONGLE_SYS_PACKET packet;
         packet.sys_type = TYPE_SYS_INFO_ALL_SETTINGS;
-        memcpy(packet.payload, &packet_settings, sizeof(DONGLE_ALL_SETTINGS_PACKET));
-        serial_api_send_sys_packet((uint8_t *)&packet, + sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET));
+        memcpy(packet.payload, &packet_settings, sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
+        serial_api_send_sys_packet((uint8_t *)&packet, + sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
         break;
       case TYPE_SYS_SET_LORA_HOME_NETWORK_ID:      
         uint16_t *value = (uint16_t *)sys_packet->payload;
@@ -109,10 +113,9 @@ void task_sys_dongle(void *pvParameters)
 }
 
 /**
- * brief task_lora_home_send
- *
- * forward lora home packet received over the UART on the air
- *
+ * @brief FreeRTOS task
+ * forward lora home packet received on the UART on the air
+ * @param pvParameters not used
  */
 void task_lora_home_send(void *pvParameters)
 {
@@ -125,7 +128,7 @@ void task_lora_home_send(void *pvParameters)
     {
       serial_packet = (SERIAL_PACKET *)rx_buffer;
       lora_packet = (LORA_HOME_PACKET *)serial_packet->data;
-      lhg.sendPacket((uint8_t *)lora_packet);
+      lhg.putPacket((uint8_t *)lora_packet);
       // char buffer[256] = "\0";
       // for (int i = 0; i < serial_packet->header.data_length + sizeof(SERIAL_PACKET_HEADER); i++)
       // {
@@ -137,6 +140,12 @@ void task_lora_home_send(void *pvParameters)
   }
 }
 
+/**
+ * @brief FreeRTOS task
+ * check whether lora packet are available and forward them through the UART
+ * 
+ * @param pvParameters not used
+ */
 void task_lora_home_receive(void *pvParameters)
 {
   uint8_t packet[LH_FRAME_MAX_SIZE];
@@ -153,7 +162,10 @@ void task_lora_home_receive(void *pvParameters)
 }
 
 /**
- * @brief refresh display every DISPLAY_TIMEOUT_REFRESH
+ * @brief FreeRTOS timer (every 1s) 
+ * refresh display every DISPLAY_TIMEOUT_REFRESH
+ *
+ * @param xTimer 
  */
 void timer_hearbeat(TimerHandle_t xTimer)
 {
@@ -164,15 +176,15 @@ void timer_hearbeat(TimerHandle_t xTimer)
   display.refresh();
   if (millis() - time > HEARBEAT_PERIOD)
   {
-    DONGLE_HEARTBEAT_PACKET packet_heartbeat;
+    DONGLE_HEARTBEAT_PACKET_PAYLOAD packet_heartbeat;
     packet_heartbeat.err_counter = lhg.err_counter;
     packet_heartbeat.rx_counter = lhg.rx_counter;
     packet_heartbeat.tx_counter = lhg.tx_counter;
     DONGLE_SYS_PACKET packet_sys;
     packet_sys.sys_type = TYPE_SYS_HEARTBEAT;
     // packet_sys.payload = (uint8_t *)&packet_heartbeat;
-    memcpy(packet_sys.payload, &packet_heartbeat, sizeof(DONGLE_HEARTBEAT_PACKET));
-    serial_api_send_sys_packet((uint8_t *)&packet_sys, sizeof(DONGLE_HEARTBEAT_PACKET) + sizeof(packet_sys.sys_type));
+    memcpy(packet_sys.payload, &packet_heartbeat, sizeof(DONGLE_HEARTBEAT_PACKET_PAYLOAD));
+    serial_api_send_sys_packet((uint8_t *)&packet_sys, sizeof(DONGLE_HEARTBEAT_PACKET_PAYLOAD) + sizeof(packet_sys.sys_type));
     time = millis();
   }
 }
@@ -181,7 +193,6 @@ void timer_hearbeat(TimerHandle_t xTimer)
  * @brief setup function - perform init of each module
  *
  * Perform the init of the following modules
- * - Serial port if debug is activated
  * - Display
  * - LoRa
  */
@@ -211,10 +222,8 @@ void setup()
   // LoRa initialization
   display.showLoRaStatus(false);
   LORA_CONFIGURATION lc = data_storage.get_lora_configuration();
-  lhg.setup(&lc, MY_NETWORK_ID);
-  DEBUG_MSG("--- LoRa Init OK!\n");
+  lhg.setup(&lc, data_storage.get_lora_home_network_id());
   display.showLoRaStatus(true);
-  DEBUG_MSG("Main Loop starting, run on Core %i\n\n", xPortGetCoreID());
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
   xTaskCreate(task_uart_tx, "task_uart_tx", 2048, NULL, 1, NULL);
   xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, NULL);
@@ -226,10 +235,7 @@ void setup()
 
 /**
  * @brief main loop of LoRaHome Dongle
- *
- * feed watchdog if messages are regularly forwarded to the broker
- * ensure mqtt connexion to the broker remain active
- * peek messages received, and forward them to the MQTT broker
+ * do nothing
  *
  */
 void loop()

@@ -1,13 +1,16 @@
+/**
+ * @file dongle_configuration.h
+ * @author mchacher
+ * @brief dongle configuration
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
 #ifndef DONGLE_CONFIGURATION_H
 #define DONGLE_CONFIGURATION_H
 
-#define VERSION_MAJOR 0
-#define VERSION_MINOR 8
-#define VERSION_PATCH 1
-
 #define HEARBEAT_PERIOD 5000
 
-#define MY_NETWORK_ID 0xACDC
 #define ACK_TIMEOUT 300
 #define MAX_RETRY_NO_VALID_ACK 3 
 

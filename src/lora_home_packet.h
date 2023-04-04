@@ -1,3 +1,10 @@
+/**
+ * @file lora_home_packet.h
+ * @author mchacher
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
 #ifndef LORA_HOME_PACKET_H
 #define LORA_HOME_PACKET_H
 
@@ -5,6 +12,11 @@
 
 #define LH_FRAME_MAX_PAYLOAD_SIZE 128
 
+/**
+ * @brief lora home packet header 
+ * 
+ * @return typedef struct the lora home packet header
+ */
 typedef struct __attribute__((__packed__))
 {
     uint8_t nodeIdEmitter;
@@ -15,6 +27,11 @@ typedef struct __attribute__((__packed__))
     uint8_t payloadSize;
 } LORA_HOME_PACKET_HEADER;
 
+/**
+ * @brief lora home packet
+ * 
+ * @return typedef struct 
+ */
 typedef struct __attribute__((__packed__))
 {
     LORA_HOME_PACKET_HEADER header;
@@ -22,11 +39,17 @@ typedef struct __attribute__((__packed__))
     uint16_t crc16;
 } LORA_HOME_PACKET;
 
+/**
+ * @brief lora home ack packet
+ * 
+ * @return typedef struct 
+ */
 typedef struct __attribute__((__packed__))
 {
     LORA_HOME_PACKET_HEADER header;
     uint16_t crc16;
 } LORA_HOME_ACK;
+
 
 
 const uint8_t LH_FRAME_HEADER_SIZE = sizeof(LORA_HOME_PACKET_HEADER);

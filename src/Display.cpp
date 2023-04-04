@@ -1,3 +1,11 @@
+/**
+ * @file display.cpp
+ * @author mchacher
+ * @brief manage lcd display of lora home dongle
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
 #include <Arduino.h>
 #include <SPI.h>
 #include <U8x8lib.h>

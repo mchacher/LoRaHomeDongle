@@ -1,3 +1,17 @@
+/**
+ * @file lora_home_gateway.cpp
+ * @author mchacher
+ * @brief Lora Home gateway implmentation
+ * Manage RX and TX messages received over Lora data link layer
+ * check / add incoming messages
+ * manage ack when needed
+ * make messages available on fifo queues to applicative layers
+ * expose communication API
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
+
 #include <lora_home_gateway.h>
 #include <ArduinoJson.h>
 #include <LoRa.h>
@@ -5,13 +19,6 @@
 #include "lora_home_configuration.h"
 #include "serial_api.h"
 #include "dongle_configuration.h"
-
-//#define DEBUG_ESP_PORT Serial
-#ifdef DEBUG_ESP_PORT
-#define DEBUG_MSG(...) DEBUG_ESP_PORT.printf(__VA_ARGS__)
-#else
-#define DEBUG_MSG(...)
-#endif
 
 // White LED management of heltec_wifi_lora_32_V2 board
 #define LED_WHITE 25
@@ -43,7 +50,7 @@ unsigned long LoRaHomeGateway::last_packet_ts = millis();
 uint16_t LoRaHomeGateway::network_id = 0;
 
 /**
- * @brief Construct a new LoRaHomeGateway::LoRaHome object
+ * @brief Construct a new LoRaHomeGateway object
  *
  */
 LoRaHomeGateway::LoRaHomeGateway()
@@ -51,24 +58,24 @@ LoRaHomeGateway::LoRaHomeGateway()
 }
 
 /**
- * @brief setup LoRaHome
- *
+ * @brief setup the lora home gateway
+ * Start Lora communication in a dedicated task (and core on ESP32)
+ * 
+ * @param lc lora configuration settings to be used
+ * @param network_id the lora home network id to be used
  */
 void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc, uint16_t network_id)
 {
-  DEBUG_MSG("LoRaHomeGateway::setup\n");
   // configure Pinout for white LED
   pinMode(LED_WHITE, OUTPUT);
   // set network id
   this->network_id = network_id;
   // setup LoRa transceiver module
   LoRa.setPins(SS, RST, DIO0);
-  DEBUG_MSG("--- LoRa.begin ... \n");
   while (!LoRa.begin(lc->channel))
   {
     delay(500);
   }
-  DEBUG_MSG("--- LoRa.begin ... done\n");
 
   LoRa.setSpreadingFactor(lc->spreading_factor);
   LoRa.setSignalBandwidth(lc->bandwidth);
@@ -95,12 +102,22 @@ void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc, uint16_t network_id)
   this->rxMode();
 }
 
+/**
+ * @brief set the lora home network id
+ * 
+ * @param network_id network id value
+ */
 void LoRaHomeGateway::setNetworkID(uint16_t network_id)
 {
   this->network_id = network_id;
 }
 
-void LoRaHomeGateway::sendPacket(uint8_t *packet)
+/**
+ * @brief put the packet in the Tx Fifo
+ * 
+ * @param packet lora home packet
+ */
+void LoRaHomeGateway::putPacket(uint8_t *packet)
 {
   bool success = false;
   uint8_t ackBuffer[LH_FRAME_ACK_SIZE];
@@ -153,12 +170,12 @@ bool LoRaHomeGateway::popLoRaHomePayload(uint8_t *rxBuffer)
 }
 
 /**
- * @brief send an ack to a given LoRaHome node
+ * @brief put an ack to the ACK tx Fifo
  *
  * @param nodeIdRecipient the ID of the node
  * @param counter the counter value of the ack
  */
-void LoRaHomeGateway::sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counter)
+void LoRaHomeGateway::putAck(uint8_t nodeIdRecipient, uint16_t counter)
 {
   LORA_HOME_ACK ack_packet = {0};
   ack_packet.header.counter = counter;
@@ -194,7 +211,7 @@ void LoRaHomeGateway::disable()
 /**
  * @brief Set Node in Rx Mode with disable invert IQ
  *
- * LoraWan principle to avoid node talking to each other
+ * LoraWan reused principle to avoid node talking to each other
  * This way a Gateway only reads messages from Nodes and never reads messages from other Gateway, and Node never reads messages from other Node
  */
 void LoRaHomeGateway::rxMode()
@@ -206,7 +223,7 @@ void LoRaHomeGateway::rxMode()
 
 /**
  * @brief Set Node in Tx Mode with enable invert IQ
- * LoraWan principle to avoid node talking to each other
+ * LoraWan reused principle to avoid node talking to each other
  * This way a Gateway only reads messages from Nodes and never reads messages from other Gateway, and Node never reads messages from other Node.
  */
 void LoRaHomeGateway::txMode()
@@ -216,9 +233,8 @@ void LoRaHomeGateway::txMode()
 }
 
 /**
- * @brief send a LoraHome Frame
+ * @brief send a packet over Lora
  *
- * @param lhf the LoRaHome Frame to be sent
  */
 void LoRaHomeGateway::send()
 {
@@ -251,7 +267,6 @@ void LoRaHomeGateway::send()
  */
 void LoRaHomeGateway::onReceive(int packet_size)
 {
-  DEBUG_MSG("LoRaHomeGateway::onReceive: Packet Size = %i\n", packet_size);
   // increment rx_counter - new message received
   rx_counter++;
   // invalid packet - flush rx fifo and return
@@ -273,7 +288,6 @@ void LoRaHomeGateway::onReceive(int packet_size)
 
   if (!checkCRC(rxMessage, packet_size))
   {
-    DEBUG_MSG("--- Error: CRC NOT OK");
     err_counter++;
     return;
   }
@@ -287,25 +301,19 @@ void LoRaHomeGateway::onReceive(int packet_size)
     switch (packet->header.messageType)
     {
     case LH_MSG_TYPE_NODE_MSG_ACK_REQ:
-      lhg.sendAckToLoRaNode(packet->header.nodeIdEmitter, packet->header.counter);
-
-      // if frame not already received (typically ack not received, and node resending)
-      // add it to the queue, else drop it
-      DEBUG_MSG("--- valid message requiring ACK, add it to the queue\n");
+      lhg.putAck(packet->header.nodeIdEmitter, packet->header.counter);
       xQueueSend(rx_packet_queue, rxMessage, 0);
       break;
     case LH_MSG_TYPE_NODE_MSG_NO_ACK_REQ:
-      DEBUG_MSG("--- valid STANDARD message, add it to the queue\n");
       xQueueSend(rx_packet_queue, rxMessage, 0);
       break;
     case LH_MSG_TYPE_NODE_ACK:
       if (packet_size != LH_FRAME_ACK_SIZE)
       {
-        // DEBUG_MSG("--- ACK message length not valid\n");
+        // ACK message length not valid
       }
       else
       {
-        // DEBUG_MSG("--- ACK message, add it to the queue - msg\n");
         xQueueSend(rx_ack_packet_queue, rxMessage, 0);
       }
       break;
@@ -313,7 +321,7 @@ void LoRaHomeGateway::onReceive(int packet_size)
       // should not receive Gateway Ack ...
       break;
     default:
-      // DEBUG_MSG("--- unknown message type. Shall be an error\n");
+      // unknown message type. Shall be an error
       err_counter++;
       break;
     }
@@ -353,31 +361,26 @@ uint16_t LoRaHomeGateway::crc16_ccitt(const uint8_t *data, unsigned int data_len
 }
 
 /**
- * @brief
+ * @brief check the CRC
  *
- * @param packet
- * @param length
+ * @param packet packet to be checked
+ * @param length length of the packet
  * @return true
  * @return false
  */
 bool LoRaHomeGateway::checkCRC(const uint8_t *packet, uint8_t length)
 {
-  DEBUG_MSG("LoRaHomeGateway::checkCRC\n");
   // check CRC - last 2 bytes should contain CRC16
   uint8_t lowCRC = packet[length - 2];
   uint8_t highCRC = packet[length - 1];
   uint16_t rx_crc16 = lowCRC | (highCRC << 8);
-  DEBUG_MSG("--- Low CRC16 = %i\n", lowCRC);
-  DEBUG_MSG("--- High CRC16 = %i\n", highCRC);
   // compute CRC16 without the last 2 bytes
   uint16_t crc16 = crc16_ccitt(packet, length - 2);
   // if CRC16 not valid, ignore LoRa message
   if (rx_crc16 != crc16)
   {
-    DEBUG_MSG("--- CRC Error\n");
     return false;
   }
-  DEBUG_MSG("--- valid CRC\n");
   return true;
 }
 

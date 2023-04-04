@@ -1,28 +1,28 @@
-#include <Arduino.h>
-#include "serial_api.h"
-#include "uart.h"
-
-/*
- * Module: serial_api.c
- * ----------------------------
- * serial applicative layer on top of uart data link
+/**
+ * @file serial_api.cpp
+ * @author mchacher
+ * @brief  serial applicative layer on top of uart data link
  * provide generic SERIAL_PACKET to exchange data with host
  * provide 4 types of SERIAL_PACKET to communication with host : 
  * - log: simply send a text information to the dongle (not used)
  * - echo: for test purpose, dongle can send an echo message, that is echo to the host
  * - system: different types of system messages (heartbeat, node info (meaning information about connected equipment, more to come ...)
+ * 
+ * @copyright Copyright (c) 2023
+ * 
  */
+#include <Arduino.h>
+#include "serial_api.h"
+#include "uart.h"
 
 
 static uint16_t _packet_id = 0x0000;
 QueueHandle_t sys_packet_queue;
 
-/*
- * Function: serial_api_send_log_message
- * ----------------------------
- *  send a log message
- *  - type of the message: MSG_TYPE_LOG
- *  - * message: the message to send
+/**
+ * @brief send a log message over uart
+ *  
+ * @param message the text message to send
  */
 void serial_api_send_log_message(char *message)
 {
@@ -36,11 +36,11 @@ void serial_api_send_log_message(char *message)
   uart_put_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
 
-/*
- * Function: serial_api_send_lora_packet
- * ----------------------------
- *  send a log message
- *  - type of the message: SERIAL_MSG_TYPE_LORA_HOME
+/**
+ * @brief send a lora home packet over uart
+ * 
+ * @param packet the lora home packet
+ * @param size packet size
  */
 void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size)
 {
@@ -54,7 +54,12 @@ void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size)
   uart_put_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
 
-
+/**
+ * @brief send a dongle system message
+ * 
+ * @param packet the lora home system message
+ * @param size packet size
+ */
 void serial_api_send_sys_packet(uint8_t *packet, uint8_t size)
 {
   SERIAL_PACKET_HEADER sph = {0};
@@ -67,16 +72,14 @@ void serial_api_send_sys_packet(uint8_t *packet, uint8_t size)
   uart_put_tx_buffer((uint8_t *)&sp, sph.data_length + sizeof(sph));
 }
 
-bool serial_api_get_system_packet(uint8_t *packet)
-{
-  BaseType_t anymsg = xQueueReceive(sys_packet_queue, packet, 0);
-  if (pdTRUE == anymsg)
-  {
-    return true;
-  }
-  return false;
-}
 
+/**
+ * @brief get lora home packet is any available
+ * 
+ * @param packet pointer to the packet received
+ * @return true if received
+ * @return false 
+ */
 bool serial_api_get_lora_home_packet(uint8_t *packet)
 {
   while (uart_get_rx_buffer(packet))
@@ -95,6 +98,13 @@ bool serial_api_get_lora_home_packet(uint8_t *packet)
   return false;
 }
 
+/**
+ * @brief get dongle system packet if any available
+ * 
+ * @param packet 
+ * @return true 
+ * @return false 
+ */
 bool serial_api_get_sys_dongle_packet(uint8_t *packet)
 {
   BaseType_t anymsg = xQueueReceive(sys_packet_queue, packet, 0);
@@ -105,6 +115,11 @@ bool serial_api_get_sys_dongle_packet(uint8_t *packet)
   return false;
 }
 
+
+/**
+ * @brief initialize serial api
+ * 
+ */
 void serial_api_init(void)
 {
   // Create a queue to hold messages

@@ -1,3 +1,10 @@
+/**
+ * @file lora_home_gateway.h
+ * @author mchacher
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
 #ifndef LORA_HOME_GATEWAY_H
 #define LORA_HOME_GATEWAY_H
 
@@ -15,10 +22,10 @@ class LoRaHomeGateway
 public:
     LoRaHomeGateway();
     void setup(LORA_CONFIGURATION *lc, uint16_t network_id);
-    void sendPacket(uint8_t *packet);
+    void putPacket(uint8_t *packet);
     void forwardMessageToNode(char *mqttJsonMsg);
     bool popLoRaHomePayload(uint8_t *rxBuffer);
-    void sendAckToLoRaNode(uint8_t nodeIdRecipient, uint16_t counter);
+    void putAck(uint8_t nodeIdRecipient, uint16_t counter);
     void enable();
     void disable();
     void setNetworkID(uint16_t network_id);

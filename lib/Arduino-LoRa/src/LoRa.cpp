@@ -57,14 +57,6 @@
 
 #define MAX_PKT_LENGTH 255
 
-//#define DEBUG_ESP_PORT Serial
-#ifdef DEBUG_ESP_PORT
-#define DEBUG_MSG(...) DEBUG_ESP_PORT.printf(__VA_ARGS__)
-#else
-#define DEBUG_MSG(...)
-#endif
-
-
 volatile int _dioRiseInterruptCounter = 0;
 portMUX_TYPE mutexDioRise = portMUX_INITIALIZER_UNLOCKED;
 
@@ -727,7 +719,6 @@ void LoRaClass::implicitHeaderMode()
 void LoRaClass::handleDio0Rise()
 {
   int irqFlags = readRegister(REG_IRQ_FLAGS);
-  //DEBUG_MSG("handleDio0Rise: IRQ_FLAGS = %d\n", irqFlags);
   // clear IRQ's
   writeRegister(REG_IRQ_FLAGS, irqFlags);
   if ((irqFlags & IRQ_PAYLOAD_CRC_ERROR_MASK) == 0)
@@ -794,8 +785,6 @@ void IRAM_ATTR LoRaClass::onDio0Rise()
 void LoRaClass::taskRxTx(void *pvParameters)
 {
   // configure dio0 interrupt
-  //vTaskDelay(1 / portTICK_PERIOD_MS);
-  DEBUG_MSG("LoRaClass::taskRxTx, run on Core %i\n\n",xPortGetCoreID());
   pinMode(LoRa._dio0, INPUT);
   LoRa.writeRegister(REG_DIO_MAPPING_1, 0x00);
   attachInterrupt(digitalPinToInterrupt(LoRa._dio0), LoRaClass::onDio0Rise, RISING);

@@ -1,23 +1,38 @@
-/*
- * Module: uart.c
- * ----------------------------
- * UART data link layer
- * use bytestuffing with START, STOP and ESC bytes
+/**
+ * @file uart.cpp
+ * @author mchacher
+ * @brief  UART data link layer
+ * send and receive data over UART
+ * use bytestuffing with START, STOP and ESC bytes to ensure the integrity and correctness of the transmitted data
+ * 2 taks are used: one for Rx and one for Tx
+ * 
+ * @copyright Copyright (c) 2023
+ * 
  */
-
 #include <Arduino.h>
 #include <uart.h>
 #include <esp_system.h>
 
+/**
+ * @brief UART rx queue
+ * 
+ */
 QueueHandle_t rx_uart_queue;
+
+/**
+ * @brief UART tx queue
+ * 
+ */
 QueueHandle_t tx_uart_queue;
 
 #define WHITE_LED 25
 
-/*
- * Function: uart_get_rx_buffer
- * return rx buffer is any available in the rx queue
- * ----------------------------
+/**
+ * @brief if any available in the uart rx queue, return it
+ * 
+ * @param buffer pointer used to return the buffer
+ * @return true if buffer available
+ * @return false no buffer available
  */
 bool uart_get_rx_buffer(uint8_t *buffer)
 {
@@ -29,10 +44,14 @@ bool uart_get_rx_buffer(uint8_t *buffer)
   return false;
 }
 
-/*
- * Function: uart_put_tx_buffer
- * ----------------------------
- * push a buffer to tx queue. Add byte stuffing prior to pushing it to the queue.
+/**
+ * @brief push a buffer to tx queue. 
+ * Add byte stuffing prior to pushing it to the queue.
+ * 
+ * @param buffer buffer to push on the queue
+ * @param length length of the buffer
+ * @return true success
+ * @return false if buffer was not pushed
  */
 bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length)
 {
@@ -64,11 +83,11 @@ bool uart_put_tx_buffer(uint8_t *buffer, uint8_t length)
   return true;
 }
 
-/*
- * Function: task_uart_rx
- * ----------------------------
- * uart rx task
+/**
+ * @brief FreeRTOS task
  * decode incoming message and push it to rx queue
+ * 
+ * @param pvParameters not used
  */
 void task_uart_rx(void *pvParameters)
 {
@@ -127,12 +146,11 @@ void task_uart_rx(void *pvParameters)
   }
 }
 
-/*
- * Function task_uart_tx
- * ----------------------------
- *  task managed by FreeRTOS
- *  check whether there is a buffer to be sent out in the tx queue
- *  send it if any
+/**
+ * @brief FreeRTOS task
+ * check whether there is a buffer in the tx queue - send it to uart if any
+ * 
+ * @param pvParameters not used
  */
 void task_uart_tx(void *pvParameters)
 {
@@ -150,11 +168,10 @@ void task_uart_tx(void *pvParameters)
 }
 
 
-/*
- * Function init_uart
- * ----------------------------
- *  initialize uart
- *  create rx and tx queue and initialized WHITE_LED as activity led
+/**
+ * @brief initialize uart 
+ * create rx and tx queue and initialized WHITE_LED as activity led
+ * 
  */
 void uart_init(void)
 {

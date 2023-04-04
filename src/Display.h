@@ -1,3 +1,10 @@
+/**
+ * @file display.h
+ * @author mchacher
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
 #ifndef DISPLAY_H
 #define DISPLAY_H
 

@@ -1,10 +1,19 @@
+/**
+ * @file data_storage.cpp
+ * @author mchacher
+ * @brief  manage persistency
+ * 
+ * @copyright Copyright (c) 2023
+ * 
+ */
+
 #include <Arduino.h>
 #include <Preferences.h>
 #include "data_storage.h"
 #include "lora_home_configuration.h"
 
 /**
- * @brief name of the DATA_ZONE used for the TTN_HiveScale
+ * @brief name of the DATA_ZONE
  *
  */
 const char *DATA_ZONE = "loradongle";
@@ -15,28 +24,72 @@ uint32_t bandwidth = 0;
 uint32_t spreading_factor = 0;
 uint32_t coding_rate = 0;
 
+/**
+ * @brief key - frequency channel
+ * 
+ */
 const char *KEY_CH = "K_CH";
+
+/**
+ * @brief key - signal bandwidth
+ * 
+ */
 const char *KEY_BW = "K_BW";
+
+/**
+ * @brief key - spreading factor
+ * 
+ */
 const char *KEY_SF = "K_SF";
+
+/**
+ * @brief key - coding rate
+ * 
+ */
 const char *KEY_CR = "K_CR";
+
+/**
+ * @brief key - network id
+ * 
+ */
 const char *KEY_NID = "K_NID";
 
+/**
+ * @brief lora configuration
+ * 
+ */
 LORA_CONFIGURATION lora_config = {
     .channel = CH_NONE,
     .bandwidth = BW_NONE,
     .spreading_factor = SF_NONE,
     .coding_rate = CR_NONE};
 
+/**
+ * @brief defaut lora configuration when no persisdent data available
+ * 
+ */
 const LORA_CONFIGURATION lora_default_config = {
     .channel = CH_3,
     .bandwidth = BW_125KHZ,
     .spreading_factor = SF_7,
     .coding_rate = CR_5};
 
+/**
+ * @brief lora home network id
+ * 
+ */
 uint16_t lora_home_network_id = 0;
 
+/**
+ * @brief lora home default network id, rock and roll
+ * 
+ */
 const uint16_t default_network_id = 0xACDC;
 
+/**
+ * @brief Construct a new Data Storage:: Data Storage object
+ * 
+ */
 DataStorage::DataStorage()
 {
 }
@@ -51,12 +104,11 @@ void DataStorage::init()
 }
 
 /**
- * @brief
+ * @brief load dongle configuration in NSV. Lora settings and Lora  Home Network ID
  *
  */
 void DataStorage::load_configuration()
 {
-
     Lora_Frequency_Channel ch = (Lora_Frequency_Channel)prefs.getUInt(KEY_CH, 0);
     if (ch != 0)
     {
@@ -105,16 +157,31 @@ void DataStorage::load_configuration()
     }
 }
 
+/**
+ * @brief assessor
+ * 
+ * @return uint16_t lora home network id
+ */
 uint16_t DataStorage::get_lora_home_network_id()
 {
     return lora_home_network_id;
 }
+
+/**
+ * @brief set and save to persistent memory
+ * 
+ * @param value lora home network id
+ */
 void DataStorage::set_lora_home_network_id(uint16_t value)
 {
     lora_home_network_id = value;
     this->save_configuration();
 }
 
+/**
+ * @brief save actual configuration in persistent memory (NSV)
+ * 
+ */
 void DataStorage::save_configuration()
 {
     prefs.putUInt(KEY_CH, lora_config.channel);
@@ -124,6 +191,12 @@ void DataStorage::save_configuration()
     prefs.putUShort(KEY_NID, lora_home_network_id);
 }
 
+/**
+ * @brief set lora communication settings paramenters
+ * save them to persistent memory
+ * 
+ * @param lc 
+ */
 void DataStorage::set_lora_configuration(LORA_CONFIGURATION *lc)
 {
     lora_config.channel = lc->channel;
