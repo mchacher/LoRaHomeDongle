@@ -9,6 +9,15 @@
 
 LoRaHomeDongle is managing LoRa downstream communication of a LoRaHome network.
 It is intended to be used with LoRa2MQTTpy service.
+
+The dongle is managing the data link layer of the lora home communication protocol.
+
+The main features are:
+- handle RX packets (check data integrity with a checksum, reply with ACK is any required, forward packet over USB uart)
+- handle TX packets (receive packet over the uart, add checksum, and send them over lora)
+- report its status with hearbeat system messages sent over uart
+- provide a setting interface with system messages (lora communication, lora home network id)
+
 <!-- 
 ### About LoRa ###
 
