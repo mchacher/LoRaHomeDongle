@@ -25,9 +25,18 @@ The main features are:
 
 ## Hardware requirements
 
+ESP32 based hardware with a semtech SX12xx lora based communication module.
+Typically Heltec LoRa 32 or TTGO LoRa32.
+
 ## Software requirements
 
+The repository comes with a full project definition to build it on top of platformio.
+VSCode shall be prefered with platformio extension.
+LoRaHomeDongle is leveraging Arduino framework, and FreeRTOS as underlying framework.
+
 ## Design principles
+
+
 
 <!-- 
 ### About LoRa ###
