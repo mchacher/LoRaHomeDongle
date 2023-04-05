@@ -2,6 +2,11 @@
 
 ## Contents
 - [Whats is LoRaHomeDongle?](#What-is-LoRaHomeDongle?)
+- [Software requirements?](#Software-requirements?)
+- [Hardware requirements?](#Hardware-requirements?)
+- [Design principles?](#Design-principles?)
+
+
 <!-- - [Usage and installation](#about-lora)
 - [References](#references) -->
 
@@ -17,6 +22,12 @@ The main features are:
 - handle TX packets (receive packet over the uart, add checksum, and send them over lora)
 - report its status with hearbeat system messages sent over uart
 - provide a setting interface with system messages (lora communication, lora home network id)
+
+## Hardware requirements
+
+## Software requirements
+
+## Design principles
 
 <!-- 
 ### About LoRa ###
