@@ -1,4 +1,4 @@
-# LoRa2MQTT
+# LoRaHomeDongle
 
 ## Contents
 - [Whats is LoRaHomeDongle?](#what-is-lorahomedongle)
