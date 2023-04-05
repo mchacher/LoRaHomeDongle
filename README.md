@@ -12,8 +12,7 @@
 
 ## What is LoRaHomeDongle?
 
-LoRaHomeDongle is managing LoRa downstream communication of a LoRaHome network.
-It is intended to be used with LoRa2MQTTpy service.
+LoRaHomeDongle is a USB adapter which enable communication with the lora home network. It is acting as a lora home gateway, intended to be used with LoRa2MQTTpy service [lora2mqttpy](https://github.com/mchacher/lora2mqttpy).
 
 The dongle is managing the data link layer of the lora home communication protocol. The main features are:
 - handle RX packets (check data integrity with a checksum, reply with ACK is any required, forward packet over USB uart)
