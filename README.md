@@ -12,7 +12,7 @@
 
 ## What is LoRaHomeDongle?
 
-LoRaHomeDongle is a USB adapter which enable communication with the lora home network. It is acting as a lora home gateway, intended to be used with [LoRa2MQTTpy service](https://github.com/mchacher/lora2mqttpy).
+LoRaHomeDongle is a USB adapter which enable bridging a lora home network and software applications (home automation). It is acting as the lora home gateway of the network, sending and receiving lora home packet over USB. It is intended to be used with [LoRa2MQTTpy service](https://github.com/mchacher/lora2mqttpy) simplifing software application integration with MQTT.
 
 The dongle is managing the data link layer of the lora home communication protocol. The main features are:
 - handle RX packets (check data integrity with a checksum, reply with ACK is any required, forward packet over USB uart)
@@ -45,7 +45,7 @@ When it is used by telecom operators to deploy commercial long-range networks, L
 ###  Principles ###
 
 The principles are the following:
-- LoRa nodes are sending JSON messages over LoRa to the LoRa2MQTT gateway
+- LoRa nodes are sending JSON messages over LoRa to the gateway
 - The JSON messages format is free, except one name-value pair that should be *"node"="name_of_the_node"*.<br/>The name *node* should be the first child, and its value is a unique identifier of the LoRa node. Two nodes shall not have the same *node* value.
 ```
 // example of a thermostat node, reporting
@@ -80,26 +80,12 @@ The principles are the following:
 }
 ```
 
-## Usage and installation ##
 
-The project has been tested with ESP32 Heltec LoRa v2 board, but this should work with any « Semtech SX12XX » boards like TTGOv2.
-
-A quite appreciable advantage of these boards is that they are ready to use with the following key features:
-- ESP32 micro-controller (with WiFi)
-- 8 Mb flash
-- Semtech chip SX1276
-- external LoRa antenna, IPEX interface
-- 0.96 inch OLED display
-- Commercial references depending on the sub-giga frequency intended to be used depending on your country
-
-Last but not least you can find these modules or equivalent at a reasonable price on Amazon or Aliexpress.
 
 ## References ##
 
 LoRa2MQTT is using many libraries available on GitHub for Arduino.
 A big thank you to all the authors:
 - [arduino-LoRa](https://github.com/sandeepmistry/arduino-LoRa). Author @sandeepmistry
-- [pubsubclient](https://github.com/knolleary/pubsubclient). Author @knolleary
-- [ArduinoJson](https://github.com/bblanchon/ArduinoJson). Author @bblanchon
-- [WiFiManager](https://github.com/tzapu/WiFiManager). Author @tzapu
+
 # LoRaHomeDongle -->
