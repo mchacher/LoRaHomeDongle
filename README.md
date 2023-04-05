@@ -2,9 +2,9 @@
 
 ## Contents
 - [Whats is LoRaHomeDongle?](#what-is-lorahomedongle)
-- [Software requirements?](#software-requirements)
-- [Hardware requirements?](#hardware-requirements)
-- [Design principles?](#design-principles)
+- [Software requirements](#software-requirements)
+- [Hardware requirements](#hardware-requirements)
+- [Design principles](#design-principles)
 
 
 <!-- - [Usage and installation](#about-lora)
