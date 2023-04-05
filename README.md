@@ -1,10 +1,10 @@
 # LoRa2MQTT
 
 ## Contents
-- [Whats is LoRaHomeDongle?](#What-is-LoRaHomeDongle?)
-- [Software requirements?](#Software-requirements?)
-- [Hardware requirements?](#Hardware-requirements?)
-- [Design principles?](#Design-principles?)
+- [Whats is LoRaHomeDongle?](#what-is-lorahomedongle)
+- [Software requirements?](#software-requirements)
+- [Hardware requirements?](#hardware-requirements)
+- [Design principles?](#design-principles)
 
 
 <!-- - [Usage and installation](#about-lora)
