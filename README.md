@@ -28,8 +28,8 @@ Typically Heltec LoRa 32 or TTGO LoRa32.
 
 ## Software requirements
 
-The repository comes with a full project definition to build it on top of PlatformIO.
-VSCode shall be prefered with PlatformIO extension.
+The repository contains a PlatformIO project.
+VSCode IDE shall be used with PlatformIO extension.
 LoRaHomeDongle is leveraging Arduino framework, and FreeRTOS as underlying framework.
 
 ## Design principles
