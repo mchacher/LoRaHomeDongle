@@ -163,7 +163,8 @@ void task_lora_home_receive(void *pvParameters)
 
 /**
  * @brief FreeRTOS timer (every 1s)
- * refresh display every DISPLAY_TIMEOUT_REFRESH
+ * refresh display each time is called
+ * send heartbeat every hertbeat period
  *
  * @param xTimer
  */
@@ -190,18 +191,16 @@ void timer_hearbeat(TimerHandle_t xTimer)
  * @brief setup function - perform init of each module
  *
  * Perform the init of the following modules
+ * - Data storage
  * - Display
+ * - UART
  * - LoRa
  */
 void setup()
 {
-  //
   data_storage.init();
   data_storage.load_configuration();
-  // data_storage.save_lora_configuration();
-  //  Display initialization
   display.init();
-  // UART initialization
   display.showUsbStatus(false);
   display.showLoRaStatus(false);
   uart_init();
@@ -215,12 +214,12 @@ void setup()
   timerAlarmWrite(timer, wdtTimeout * 1000, false); // set time in us
   timerAlarmEnable(timer);                          // enable interrupt
 #endif
-
   // LoRa initialization
   display.showLoRaStatus(false);
   LORA_CONFIGURATION lc = data_storage.get_lora_configuration();
   lhg.setup(&lc, data_storage.get_lora_home_network_id());
   display.showLoRaStatus(true);
+  // create tasks
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
   xTaskCreate(task_uart_tx, "task_uart_tx", 2048, NULL, 1, NULL);
   xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, NULL);
