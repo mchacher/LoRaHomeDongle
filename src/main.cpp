@@ -1,9 +1,9 @@
 /**
  * @file main.cpp
  * @author mchacher
- * 
+ *
  * @copyright Copyright (c) 2023
- * 
+ *
  */
 #include <Arduino.h>
 #include <esp_system.h>
@@ -16,13 +16,12 @@
 #include "data_storage.h"
 #include "version.h"
 
-
 // uncomment to activate the watchdog
 #define WATCHDOG
 // watchdog management
 #ifdef WATCHDOG
 // time in ms to trigger the watchdog
-const int wdtTimeout = 10000;
+const int wdtTimeout = 60000;
 hw_timer_t *timer = NULL;
 #endif
 
@@ -36,8 +35,6 @@ DataStorage data_storage;
 // Tasks and Timers
 TaskHandle_t taskHandle = NULL;
 TimerHandle_t xTimerDisplayRefresh = NULL;
-
-
 
 #ifdef WATCHDOG
 
@@ -97,9 +94,9 @@ void task_sys_dongle(void *pvParameters)
         DONGLE_SYS_PACKET packet;
         packet.sys_type = TYPE_SYS_INFO_ALL_SETTINGS;
         memcpy(packet.payload, &packet_settings, sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
-        serial_api_send_sys_packet((uint8_t *)&packet, + sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
+        serial_api_send_sys_packet((uint8_t *)&packet, +sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
         break;
-      case TYPE_SYS_SET_LORA_HOME_NETWORK_ID:      
+      case TYPE_SYS_SET_LORA_HOME_NETWORK_ID:
         uint16_t *value = (uint16_t *)sys_packet->payload;
         // sprintf(buffer + strlen(buffer), " network_id = %02x", *value);
         // serial_api_send_log_message(buffer);
@@ -142,8 +139,8 @@ void task_lora_home_send(void *pvParameters)
 
 /**
  * @brief FreeRTOS task
- * check whether lora packet are available and forward them through the UART
- * 
+ * check whether lora packets are available and forward them through the UART
+ *
  * @param pvParameters not used
  */
 void task_lora_home_receive(void *pvParameters)
@@ -153,6 +150,9 @@ void task_lora_home_receive(void *pvParameters)
   {
     if (lhg.popLoRaHomePayload(packet))
     {
+#ifdef WATCHDOG
+      timerWrite(timer, 0);
+#endif
       LORA_HOME_PACKET *lhp = (LORA_HOME_PACKET *)packet;
       uint8_t size = sizeof(LORA_HOME_PACKET_HEADER) + lhp->header.payloadSize; // + LH_FRAME_FOOTER_SIZE;
       serial_api_send_lora_home_packet(packet, size);
@@ -162,17 +162,14 @@ void task_lora_home_receive(void *pvParameters)
 }
 
 /**
- * @brief FreeRTOS timer (every 1s) 
+ * @brief FreeRTOS timer (every 1s)
  * refresh display every DISPLAY_TIMEOUT_REFRESH
  *
- * @param xTimer 
+ * @param xTimer
  */
 void timer_hearbeat(TimerHandle_t xTimer)
 {
   static unsigned long time = 0;
-#ifdef WATCHDOG
-  timerWrite(timer, 0);
-#endif
   display.refresh();
   if (millis() - time > HEARBEAT_PERIOD)
   {
