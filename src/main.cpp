@@ -168,11 +168,11 @@ void task_lora_home_receive(void *pvParameters)
  *
  * @param xTimer
  */
-void timer_hearbeat(TimerHandle_t xTimer)
+void timer_heartbeat(TimerHandle_t xTimer)
 {
   static unsigned long time = 0;
   display.refresh();
-  if (millis() - time > HEARBEAT_PERIOD)
+  if (millis() - time > HEARTBEAT_PERIOD)
   {
     DONGLE_HEARTBEAT_PACKET_PAYLOAD packet_heartbeat;
     packet_heartbeat.err_counter = lhg.err_counter;
@@ -225,7 +225,7 @@ void setup()
   xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, NULL);
   xTaskCreate(task_lora_home_receive, "task_lora_home_receive", 2048, NULL, 1, NULL);
   xTaskCreate(task_sys_dongle, "task_sys_dongle", 2048, NULL, 1, NULL);
-  xTimerDisplayRefresh = xTimerCreate("timer_hearbeat", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_hearbeat);
+  xTimerDisplayRefresh = xTimerCreate("timer_heartbeat", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_heartbeat);
   xTimerStart(xTimerDisplayRefresh, 0);
 }
 
