@@ -38,6 +38,7 @@ private:
     static void send();
     static bool checkCRC(const uint8_t *packet, uint8_t length);
     static uint16_t crc16_ccitt(const uint8_t *data, unsigned int data_len);
+    static void taskRxTx(void *pvParameters);
 
 public:
     static uint32_t rx_counter;
@@ -51,6 +52,7 @@ private:
     static QueueHandle_t tx_packet_queue; 
     static uint16_t packet_id_counter;
     static uint16_t network_id;
+    static bool run;
 };
 
 extern LoRaHomeGateway lhg;

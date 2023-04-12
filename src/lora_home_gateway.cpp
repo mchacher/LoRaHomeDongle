@@ -7,9 +7,9 @@
  * manage ack when needed
  * make messages available on fifo queues to applicative layers
  * expose communication API
- * 
+ *
  * @copyright Copyright (c) 2023
- * 
+ *
  */
 
 #include <lora_home_gateway.h>
@@ -23,7 +23,6 @@
 // White LED management of heltec_wifi_lora_32_V2 board
 #define LED_WHITE 25
 
-
 // rx LoRa packet queue
 QueueHandle_t LoRaHomeGateway::rx_packet_queue = xQueueCreate(5, LH_FRAME_MAX_SIZE * sizeof(uint8_t));
 // rx LoRa ACK queue
@@ -34,7 +33,7 @@ QueueHandle_t LoRaHomeGateway::tx_packet_queue = xQueueCreate(5, LH_FRAME_MAX_SI
 // if running on Core 1 - same as per Arduino Framework
 // if running on Core 2 - leverage dual core architecture of ESP32
 static int lora_code = 0;
-TaskHandle_t task_lora;
+TaskHandle_t task_lora = NULL;
 
 // rx_counter - each time a LoRa message is received, counter is incremented
 uint32_t LoRaHomeGateway::rx_counter = 0;
@@ -60,7 +59,7 @@ LoRaHomeGateway::LoRaHomeGateway()
 /**
  * @brief setup the lora home gateway
  * Start Lora communication in a dedicated task (and core on ESP32)
- * 
+ *
  * @param lc lora configuration settings to be used
  * @param network_id the lora home network id to be used
  */
@@ -84,27 +83,11 @@ void LoRaHomeGateway::setup(LORA_CONFIGURATION *lc, uint16_t network_id)
   // ranges from 0-0xFF
   // LoRa.setSyncWord(LORA_SYNC_WORD);
   LoRa.enableCrc();
-
-  // set callback handler for LoRa message
-  this->enable();
-
-  // start LoRa Task on core 0 (not used by arduino framework)
-  xTaskCreatePinnedToCore(
-      LoRa.taskRxTx,    /* Task function. */
-      "LoRa",           /* name of task. */
-      10000,            /* 10kBytes Stack size of task */
-      NULL,             /* (void *)this->onReceive, parameter of the task */
-      1,                /* priority of the task */
-      &task_lora, /* Task handler to keep track of created task */
-      lora_code);        /* pin task to core 0, default Arduino setup and main running on core 1 */
-
-  // set in rx mode.
-  this->rxMode();
 }
 
 /**
  * @brief set the lora home network id
- * 
+ *
  * @param network_id network id value
  */
 void LoRaHomeGateway::setNetworkID(uint16_t network_id)
@@ -114,7 +97,7 @@ void LoRaHomeGateway::setNetworkID(uint16_t network_id)
 
 /**
  * @brief put the packet in the Tx Fifo
- * 
+ *
  * @param packet lora home packet
  */
 void LoRaHomeGateway::putPacket(uint8_t *packet)
@@ -136,7 +119,7 @@ void LoRaHomeGateway::putPacket(uint8_t *packet)
     if (pdTRUE == anymsg)
     {
       LORA_HOME_PACKET *ack;
-      ack = (LORA_HOME_PACKET*) ackBuffer;
+      ack = (LORA_HOME_PACKET *)ackBuffer;
       if ((ack->header.nodeIdEmitter == lora_packet->header.nodeIdRecipient) && (ack->header.counter == lora_packet->header.counter))
       {
         success = true;
@@ -184,7 +167,7 @@ void LoRaHomeGateway::putAck(uint8_t nodeIdRecipient, uint16_t counter)
   ack_packet.header.nodeIdEmitter = LH_NODE_ID_GATEWAY;
   ack_packet.header.nodeIdRecipient = nodeIdRecipient;
   ack_packet.header.payloadSize = 0;
-  ack_packet.crc16 = crc16_ccitt((uint8_t *) &ack_packet, sizeof(LORA_HOME_PACKET_HEADER));
+  ack_packet.crc16 = crc16_ccitt((uint8_t *)&ack_packet, sizeof(LORA_HOME_PACKET_HEADER));
   xQueueSend(tx_packet_queue, &ack_packet, 0);
 }
 
@@ -194,8 +177,25 @@ void LoRaHomeGateway::putAck(uint8_t nodeIdRecipient, uint16_t counter)
  */
 void LoRaHomeGateway::enable()
 {
-  LoRa.onReceive(this->onReceive);
-  LoRa.onTransmit(this->send);
+  if (NULL == task_lora)
+  {
+    // start LoRa Task on core 0 (not used by arduino framework)
+    xTaskCreatePinnedToCore(
+        taskRxTx,   /* Task function. */
+        "LoRa",     /* name of task. */
+        10000,      /* 10kBytes Stack size of task */
+        NULL,       /* (void *)this->onReceive, parameter of the task */
+        1,          /* priority of the task */
+        &task_lora, /* Task handler to keep track of created task */
+        lora_code); /* pin task to core 0, default Arduino setup and main running on core 1 */
+
+    // set in rx mode.
+    this->rxMode();
+  }
+  else
+  {
+    vTaskResume(task_lora);
+  }
 }
 
 /**
@@ -204,8 +204,7 @@ void LoRaHomeGateway::enable()
  */
 void LoRaHomeGateway::disable()
 {
-  LoRa.onReceive(nullptr); // NULL before
-  LoRa.onTransmit(nullptr);
+  vTaskSuspend(task_lora);
 }
 
 /**
@@ -228,36 +227,8 @@ void LoRaHomeGateway::rxMode()
  */
 void LoRaHomeGateway::txMode()
 {
-  LoRa.idle();           // set standby mode
+  // LoRa.idle();           // useless, done in LoRa.beginPacket
   LoRa.enableInvertIQ(); // active invert I and Q signals
-}
-
-/**
- * @brief send a packet over Lora
- *
- */
-void LoRaHomeGateway::send()
-{
-
-  uint8_t txBuffer[LH_FRAME_MAX_SIZE];
-  BaseType_t anymsg = xQueueReceive(tx_packet_queue, txBuffer, 0);
-  if (pdTRUE == anymsg)
-  {
-    tx_counter++;
-    uint8_t size = LH_FRAME_HEADER_SIZE + txBuffer[LH_PACKET_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
-    txMode();
-    LoRa.beginPacket();
-    //char log[256] = "\0";
-    for (uint8_t i = 0; i < size; i++)
-    {
-      LoRa.write(txBuffer[i]);
-      //sprintf(log + strlen(log), "%02X:", txBuffer[i]);
-    }
-    LoRa.flush();
-    LoRa.endPacket(false);
-    rxMode();
-    //serial_api_send_log_message(log);
-  }
 }
 
 /**
@@ -269,18 +240,12 @@ void LoRaHomeGateway::onReceive(int packet_size)
 {
   // increment rx_counter - new message received
   rx_counter++;
-  // invalid packet - flush rx fifo and return
+  uint8_t rxMessage[LH_FRAME_MAX_SIZE];
   if ((packet_size > LH_FRAME_MAX_SIZE) || (packet_size < LH_FRAME_MIN_SIZE))
   {
-    for (int i = 0; i < packet_size; i++)
-    {
-      LoRa.read();
-    }
+    err_counter++;
     return;
   }
-
-  uint8_t rxMessage[LH_FRAME_MAX_SIZE];
-
   for (int i = 0; i < packet_size; i++)
   {
     rxMessage[i] = (uint8_t)LoRa.read();
@@ -325,6 +290,50 @@ void LoRaHomeGateway::onReceive(int packet_size)
       err_counter++;
       break;
     }
+  }
+}
+
+/**
+ * @brief send a packet over Lora
+ *
+ */
+void LoRaHomeGateway::send()
+{
+  uint8_t txBuffer[LH_FRAME_MAX_SIZE];
+  BaseType_t anymsg = xQueueReceive(tx_packet_queue, txBuffer, 0);
+  if (pdTRUE == anymsg)
+  {
+    tx_counter++;
+    uint8_t size = LH_FRAME_HEADER_SIZE + txBuffer[LH_PACKET_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
+    txMode();
+    while (LoRa.beginPacket() == 0)
+      ;
+    // char log[256] = "\0";
+    for (uint8_t i = 0; i < size; i++)
+    {
+      LoRa.write(txBuffer[i]);
+      // sprintf(log + strlen(log), "%02X:", txBuffer[i]);
+    }
+    LoRa.endPacket();
+    rxMode();
+    // serial_api_send_log_message(log);
+  }
+}
+
+void LoRaHomeGateway::taskRxTx(void *pvParameters)
+{
+  int packet_length = 0;
+  while (true)
+  {
+    packet_length = LoRa.availablePacket();
+    if (packet_length > 0)
+    {
+      onReceive(packet_length);
+    }
+    // call a send task
+    send();
+    // give the opportunity to the IDLE task to run, and so avoid the TaskWatchDog timer to trigger a reset
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 

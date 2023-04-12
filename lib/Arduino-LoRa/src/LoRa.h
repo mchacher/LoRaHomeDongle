@@ -24,20 +24,19 @@
 #define PA_OUTPUT_RFO_PIN          0
 #define PA_OUTPUT_PA_BOOST_PIN     1
 
-class LoRaClass : public Stream {
+class LoRaClass {
 public:
   LoRaClass();
 
   int begin(long frequency);
   void end();
+  // explicit
+  int beginPacket();
+  int endPacket();
 
-  int beginPacket(int implicitHeader = false);
-  int endPacket(bool async = false);
-
-  int parsePacket(int size = 0);
+  int availablePacket();
   int packetRssi();
   float packetSnr();
-  long packetFrequencyError();
 
   // from Print
   virtual size_t write(uint8_t byte);
@@ -47,11 +46,8 @@ public:
   virtual int available();
   virtual int read();
   virtual int peek();
-  virtual void flush();
 
 #ifndef ARDUINO_SAMD_MKRWAN1300
-  void onReceive(void(*callback)(int));
-  void onTransmit(void(*callback)());
   void receive(int size = 0);
 #endif
   void idle();
@@ -78,11 +74,6 @@ public:
   byte random();
 
   void setPins(int ss = LORA_DEFAULT_SS_PIN, int reset = LORA_DEFAULT_RESET_PIN, int dio0 = LORA_DEFAULT_DIO0_PIN);
-  void setSPI(SPIClass& spi);
-  void setSPIFrequency(uint32_t frequency);
-
-  void dumpRegisters(Stream& out);
-  static void taskRxTx(void *pvParameters);
 
 private:
   void explicitHeaderMode();
@@ -111,9 +102,6 @@ private:
   int _dio0;
   long _frequency;
   int _packetIndex;
-  int _implicitHeaderMode;
-  void (*_onReceive)(int);
-  void (*_onTransmit)();
 };
 
 extern LoRaClass LoRa;

@@ -57,40 +57,18 @@
 
 #define MAX_PKT_LENGTH 255
 
-volatile int _dioRiseInterruptCounter = 0;
-portMUX_TYPE mutexDioRise = portMUX_INITIALIZER_UNLOCKED;
 
 LoRaClass::LoRaClass() : _spiSettings(LORA_DEFAULT_SPI_FREQUENCY, MSBFIRST, SPI_MODE0),
                          _spi(&LORA_DEFAULT_SPI),
                          _ss(LORA_DEFAULT_SS_PIN), _reset(LORA_DEFAULT_RESET_PIN), _dio0(LORA_DEFAULT_DIO0_PIN),
                          _frequency(0),
-                         _packetIndex(0),
-                         _implicitHeaderMode(0),
-                         _onReceive(NULL)
+                         _packetIndex(0)
 {
-  // overide Stream timeout value
-  setTimeout(0);
+
 }
 
 int LoRaClass::begin(long frequency)
 {
-#ifdef ARDUINO_SAMD_MKRWAN1300
-  pinMode(LORA_IRQ_DUMB, OUTPUT);
-  digitalWrite(LORA_IRQ_DUMB, LOW);
-
-  // Hardware reset
-  pinMode(LORA_BOOT0, OUTPUT);
-  digitalWrite(LORA_BOOT0, LOW);
-
-  pinMode(LORA_RESET, OUTPUT);
-  digitalWrite(LORA_RESET, HIGH);
-  delay(200);
-  digitalWrite(LORA_RESET, LOW);
-  delay(200);
-  digitalWrite(LORA_RESET, HIGH);
-  delay(50);
-#endif
-
   // setup pins
   pinMode(_ss, OUTPUT);
   // set SS high
@@ -119,23 +97,17 @@ int LoRaClass::begin(long frequency)
 
   // put in sleep mode
   sleep();
-
   // set frequency
   setFrequency(frequency);
-
   // set base addresses
   writeRegister(REG_FIFO_TX_BASE_ADDR, 0);
   writeRegister(REG_FIFO_RX_BASE_ADDR, 0);
-
   // set LNA boost
   writeRegister(REG_LNA, readRegister(REG_LNA) | 0x03);
-
   // set auto AGC
   writeRegister(REG_MODEM_CONFIG_3, 0x04);
-
   // set output power to 17 dBm
   setTxPower(17);
-
   // put in standby mode
   idle();
 
@@ -146,12 +118,11 @@ void LoRaClass::end()
 {
   // put in sleep mode
   sleep();
-
   // stop SPI
   _spi->end();
 }
 
-int LoRaClass::beginPacket(int implicitHeader)
+int LoRaClass::beginPacket()
 {
   if (isTransmitting())
   {
@@ -160,44 +131,25 @@ int LoRaClass::beginPacket(int implicitHeader)
 
   // put in standby mode
   idle();
-
-  if (implicitHeader)
-  {
-    implicitHeaderMode();
-  }
-  else
-  {
-    explicitHeaderMode();
-  }
-
-  // reset FIFO address and paload length
+  //explicitHeaderMode();
+  // reset FIFO address and payload length
   writeRegister(REG_FIFO_ADDR_PTR, 0);
   writeRegister(REG_PAYLOAD_LENGTH, 0);
 
   return 1;
 }
 
-int LoRaClass::endPacket(bool async)
+int LoRaClass::endPacket()
 {
   // put in TX mode
   writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_TX);
-
-  if (async)
+  // wait for TX done
+  while ((readRegister(REG_IRQ_FLAGS) & IRQ_TX_DONE_MASK) == 0)
   {
-    // grace time is required for the radio
-    delayMicroseconds(150);
+    yield();
   }
-  else
-  {
-    // wait for TX done
-    while ((readRegister(REG_IRQ_FLAGS) & IRQ_TX_DONE_MASK) == 0)
-    {
-      yield();
-    }
-    // clear IRQ's
-    writeRegister(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
-  }
-
+  // clear IRQ's
+  writeRegister(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
   return 1;
 }
 
@@ -207,68 +159,33 @@ bool LoRaClass::isTransmitting()
   {
     return true;
   }
-
   if (readRegister(REG_IRQ_FLAGS) & IRQ_TX_DONE_MASK)
   {
     // clear IRQ's
     writeRegister(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
   }
-
   return false;
 }
 
-int LoRaClass::parsePacket(int size)
+int LoRaClass::availablePacket()
 {
-  int packetLength = 0;
-  int irqFlags = readRegister(REG_IRQ_FLAGS);
+  int packet_length = 0;
+  int irq_flags = readRegister(REG_IRQ_FLAGS);
 
-  if (size > 0)
-  {
-    implicitHeaderMode();
-
-    writeRegister(REG_PAYLOAD_LENGTH, size & 0xff);
-  }
-  else
-  {
-    explicitHeaderMode();
-  }
-
-  // clear IRQ's
-  writeRegister(REG_IRQ_FLAGS, irqFlags);
-
-  if ((irqFlags & IRQ_RX_DONE_MASK) && (irqFlags & IRQ_PAYLOAD_CRC_ERROR_MASK) == 0)
+  explicitHeaderMode();
+  if ((irq_flags & IRQ_RX_DONE_MASK) && (irq_flags & IRQ_PAYLOAD_CRC_ERROR_MASK) == 0)
   {
     // received a packet
     _packetIndex = 0;
-
-    // read packet length
-    if (_implicitHeaderMode)
-    {
-      packetLength = readRegister(REG_PAYLOAD_LENGTH);
-    }
-    else
-    {
-      packetLength = readRegister(REG_RX_NB_BYTES);
-    }
-
+    packet_length = readRegister(REG_RX_NB_BYTES);
     // set FIFO address to current RX address
     writeRegister(REG_FIFO_ADDR_PTR, readRegister(REG_FIFO_RX_CURRENT_ADDR));
-
     // put in standby mode
-    idle();
+    // idle();
   }
-  else if (readRegister(REG_OP_MODE) != (MODE_LONG_RANGE_MODE | MODE_RX_SINGLE))
-  {
-    // not currently in RX mode
-
-    // reset FIFO address
-    writeRegister(REG_FIFO_ADDR_PTR, 0);
-
-    // put in single RX mode
-    writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_RX_SINGLE);
-  }
-
-  return packetLength;
+  // clear IRQ's
+  writeRegister(REG_IRQ_FLAGS, irq_flags);
+  return packet_length;
 }
 
 int LoRaClass::packetRssi()
@@ -279,26 +196,6 @@ int LoRaClass::packetRssi()
 float LoRaClass::packetSnr()
 {
   return ((int8_t)readRegister(REG_PKT_SNR_VALUE)) * 0.25;
-}
-
-long LoRaClass::packetFrequencyError()
-{
-  int32_t freqError = 0;
-  freqError = static_cast<int32_t>(readRegister(REG_FREQ_ERROR_MSB) & B111);
-  freqError <<= 8L;
-  freqError += static_cast<int32_t>(readRegister(REG_FREQ_ERROR_MID));
-  freqError <<= 8L;
-  freqError += static_cast<int32_t>(readRegister(REG_FREQ_ERROR_LSB));
-
-  if (readRegister(REG_FREQ_ERROR_MSB) & B1000)
-  {                      // Sign bit is on
-    freqError -= 524288; // B1000'0000'0000'0000'0000
-  }
-
-  const float fXtal = 32E6;                                                                                         // FXOSC: crystal oscillator (XTAL) frequency (2.5. Chip Specification, p. 14)
-  const float fError = ((static_cast<float>(freqError) * (1L << 24)) / fXtal) * (getSignalBandwidth() / 500000.0f); // p. 37
-
-  return static_cast<long>(fError);
 }
 
 size_t LoRaClass::write(uint8_t byte)
@@ -364,52 +261,12 @@ int LoRaClass::peek()
   return b;
 }
 
-void LoRaClass::flush()
-{
-}
-
-#ifndef ARDUINO_SAMD_MKRWAN1300
-void LoRaClass::onReceive(void (*callback)(int))
-{
-  _onReceive = callback;
-
-  //   if (callback) {
-  //     pinMode(_dio0, INPUT);
-
-  //     writeRegister(REG_DIO_MAPPING_1, 0x00);
-  // #ifdef SPI_HAS_NOTUSINGINTERRUPT
-  //     SPI.usingInterrupt(digitalPinToInterrupt(_dio0));
-  // #endif
-  //     attachInterrupt(digitalPinToInterrupt(_dio0), LoRaClass::onDio0Rise, RISING);
-  //   } else {
-  //     detachInterrupt(digitalPinToInterrupt(_dio0));
-  // #ifdef SPI_HAS_NOTUSINGINTERRUPT
-  //     SPI.notUsingInterrupt(digitalPinToInterrupt(_dio0));
-  // #endif
-  //   }
-}
-
-void LoRaClass::onTransmit(void (*callback)())
-{
-  _onTransmit = callback;
-}
-
 void LoRaClass::receive(int size)
 {
-  if (size > 0)
-  {
-    implicitHeaderMode();
-
-    writeRegister(REG_PAYLOAD_LENGTH, size & 0xff);
-  }
-  else
-  {
-    explicitHeaderMode();
-  }
-
+  writeRegister(REG_DIO_MAPPING_1, 0x00); // DIO0 => RXDONE
+  //explicitHeaderMode();
   writeRegister(REG_OP_MODE, MODE_LONG_RANGE_MODE | MODE_RX_CONTINUOUS);
 }
-#endif
 
 void LoRaClass::idle()
 {
@@ -460,7 +317,7 @@ void LoRaClass::setTxPower(int level, int outputPin)
       {
         level = 2;
       }
-      //Default value PA_HF/LF or +17dBm
+      // Default value PA_HF/LF or +17dBm
       writeRegister(REG_PA_DAC, 0x84);
       setOCP(100);
     }
@@ -681,64 +538,9 @@ void LoRaClass::setPins(int ss, int reset, int dio0)
   _dio0 = dio0;
 }
 
-void LoRaClass::setSPI(SPIClass &spi)
-{
-  _spi = &spi;
-}
-
-void LoRaClass::setSPIFrequency(uint32_t frequency)
-{
-  _spiSettings = SPISettings(frequency, MSBFIRST, SPI_MODE0);
-}
-
-void LoRaClass::dumpRegisters(Stream &out)
-{
-  for (int i = 0; i < 128; i++)
-  {
-    out.print("0x");
-    out.print(i, HEX);
-    out.print(": 0x");
-    out.println(readRegister(i), HEX);
-  }
-}
-
 void LoRaClass::explicitHeaderMode()
 {
-  _implicitHeaderMode = 0;
-
   writeRegister(REG_MODEM_CONFIG_1, readRegister(REG_MODEM_CONFIG_1) & 0xfe);
-}
-
-void LoRaClass::implicitHeaderMode()
-{
-  _implicitHeaderMode = 1;
-
-  writeRegister(REG_MODEM_CONFIG_1, readRegister(REG_MODEM_CONFIG_1) | 0x01);
-}
-
-void LoRaClass::handleDio0Rise()
-{
-  int irqFlags = readRegister(REG_IRQ_FLAGS);
-  // clear IRQ's
-  writeRegister(REG_IRQ_FLAGS, irqFlags);
-  if ((irqFlags & IRQ_PAYLOAD_CRC_ERROR_MASK) == 0)
-  {
-    // received a packet
-    _packetIndex = 0;
-    // read packet length
-    int packetLength = _implicitHeaderMode ? readRegister(REG_PAYLOAD_LENGTH) : readRegister(REG_RX_NB_BYTES);
-    // set FIFO address to current RX address
-    writeRegister(REG_FIFO_ADDR_PTR, readRegister(REG_FIFO_RX_CURRENT_ADDR));
-    if (_onReceive != NULL)
-    {
-      _onReceive(packetLength);
-    }
-    // reset FIFO address
-    // this should be removed according to the pull request on the net
-    // https://github.com/sandeepmistry/arduino-LoRa/issues/218
-    // https://github.com/sandeepmistry/arduino-LoRa/issues/222
-    // writeRegister(REG_FIFO_ADDR_PTR, 0);
-  }
 }
 
 uint8_t LoRaClass::readRegister(uint8_t address)
@@ -767,54 +569,4 @@ uint8_t LoRaClass::singleTransfer(uint8_t address, uint8_t value)
   return response;
 }
 
-/**
- * onDio0Rise
- * Handle Dio0 interrupt
- */
-void IRAM_ATTR LoRaClass::onDio0Rise()
-{
-  portENTER_CRITICAL(&mutexDioRise);
-  _dioRiseInterruptCounter++;
-  portEXIT_CRITICAL(&mutexDioRise);
-  //LoRa.handleDio0Rise();
-}
-
-/**
- * Manage RX / LoRa data received
- */
-void LoRaClass::taskRxTx(void *pvParameters)
-{
-  // configure dio0 interrupt
-  pinMode(LoRa._dio0, INPUT);
-  LoRa.writeRegister(REG_DIO_MAPPING_1, 0x00);
-  attachInterrupt(digitalPinToInterrupt(LoRa._dio0), LoRaClass::onDio0Rise, RISING);
-  while (true)
-  {
-    // check if any message received
-    if (_dioRiseInterruptCounter > 0)
-    {
-      portENTER_CRITICAL(&mutexDioRise);
-      _dioRiseInterruptCounter--;
-      portEXIT_CRITICAL(&mutexDioRise);
-      LoRa.handleDio0Rise();
-    }
-    // call a send task
-    if (LoRa._onTransmit != NULL)
-    {
-      LoRa._onTransmit();
-    }
-    // give the opportunity to the IDLE task to run, and so avoid the TaskWatchDog timer to trigger a reset
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-  }
-}
-
 LoRaClass LoRa;
-
-/**
-E (13938) task_wdt: Task watchdog got triggered. The following tasks did not reset the watchdog in time:
-E (13938) task_wdt:  - IDLE0 (CPU 0)
-E (13938) task_wdt: Tasks currently running:
-E (13938) task_wdt: CPU 0: LoRa
-E (13938) task_wdt: CPU 1: IDLE1
-E (13938) task_wdt: Aborting.
-**/

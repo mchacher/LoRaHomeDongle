@@ -78,6 +78,7 @@ void task_sys_dongle(void *pvParameters)
         // serial_api_send_log_message(buffer);
         lhg.disable();
         lhg.setup(lc, data_storage.get_lora_home_network_id());
+        lhg.enable();
         break;
       case TYPE_SYS_RESET:
         esp_restart();
@@ -218,6 +219,7 @@ void setup()
   display.showLoRaStatus(false);
   LORA_CONFIGURATION lc = data_storage.get_lora_configuration();
   lhg.setup(&lc, data_storage.get_lora_home_network_id());
+  lhg.enable();
   display.showLoRaStatus(true);
   // create tasks
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
