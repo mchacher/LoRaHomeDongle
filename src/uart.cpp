@@ -142,7 +142,11 @@ void task_uart_rx(void *pvParameters)
         break;
       }
     }
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    else
+    {
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+
   }
 }
 
