@@ -95,7 +95,7 @@ void task_sys_dongle(void *pvParameters)
         DONGLE_SYS_PACKET packet;
         packet.sys_type = TYPE_SYS_INFO_ALL_SETTINGS;
         memcpy(packet.payload, &packet_settings, sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
-        serial_api_send_sys_packet((uint8_t *)&packet, +sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
+        serial_api_send_sys_packet((uint8_t *)&packet, sizeof(packet.sys_type) + sizeof(DONGLE_ALL_SETTINGS_PACKET_PAYLOAD));
         break;
       case TYPE_SYS_SET_LORA_HOME_NETWORK_ID:
         uint16_t *value = (uint16_t *)sys_packet->payload;

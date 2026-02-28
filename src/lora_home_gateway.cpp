@@ -238,8 +238,6 @@ void LoRaHomeGateway::txMode()
  */
 void LoRaHomeGateway::onReceive(int packet_size)
 {
-  // increment rx_counter - new message received
-  rx_counter++;
   uint8_t rxMessage[LH_FRAME_MAX_SIZE];
   if ((packet_size > LH_FRAME_MAX_SIZE) || (packet_size < LH_FRAME_MIN_SIZE))
   {
@@ -256,6 +254,9 @@ void LoRaHomeGateway::onReceive(int packet_size)
     err_counter++;
     return;
   }
+
+  // increment rx_counter only after size and CRC validation
+  rx_counter++;
 
   LORA_HOME_PACKET *packet;
   packet = (LORA_HOME_PACKET *)&rxMessage[0];
@@ -306,8 +307,16 @@ void LoRaHomeGateway::send()
     tx_counter++;
     uint8_t size = LH_FRAME_HEADER_SIZE + txBuffer[LH_PACKET_INDEX_PAYLOAD_SIZE] + LH_FRAME_FOOTER_SIZE;
     txMode();
+    uint8_t begin_retry = 0;
     while (LoRa.beginPacket() == 0)
-      ;
+    {
+      vTaskDelay(1);
+      if (++begin_retry > 100)
+      {
+        rxMode();
+        return;
+      }
+    }
     // char log[256] = "\0";
     for (uint8_t i = 0; i < size; i++)
     {

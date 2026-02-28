@@ -114,18 +114,17 @@ void task_uart_rx(void *pvParameters)
         }
         break;
       case RX_ACTIVE:
-        rx_buffer[i++] = receivedByte;
         // manage escaping
         // if escaping, keep character and remove escape_next_byte
         if (esc_next_byte == true)
         {
+          rx_buffer[i++] = receivedByte;
           esc_next_byte = false;
         }
         // if esc flag, ignore character and wait for next one
         else if (receivedByte == UART_FLAG_ESC)
         {
           esc_next_byte = true;
-          i = i - 1;
         }
         // if stop flag, push message in ring buffer, get ready for next rx message
         else if (receivedByte == UART_FLAG_STOP)
@@ -134,7 +133,18 @@ void task_uart_rx(void *pvParameters)
           xQueueSendToBack(rx_uart_queue, &rx_buffer[0], 0);
           i = 0;
           rx_state = RX_IDLE;
-          // esc_next_byte = false;
+          digitalWrite(WHITE_LED, LOW);
+        }
+        else
+        {
+          rx_buffer[i++] = receivedByte;
+        }
+        // guard against buffer overflow on malformed input
+        if (i >= UART_RX_BUFFER_SIZE)
+        {
+          i = 0;
+          rx_state = RX_IDLE;
+          esc_next_byte = false;
           digitalWrite(WHITE_LED, LOW);
         }
         break;

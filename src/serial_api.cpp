@@ -94,6 +94,7 @@ bool serial_api_get_lora_home_packet(uint8_t *packet)
     {
       xQueueSendToBack(sys_packet_queue, packet, 0);
     }
+    // LOG and other types are intentionally ignored (host→dongle LOG not supported)
   }
   return false;
 }
