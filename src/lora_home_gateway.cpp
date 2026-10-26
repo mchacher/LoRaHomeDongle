@@ -97,6 +97,11 @@ void LoRaHomeGateway::setNetworkID(uint16_t network_id)
 
 /**
  * @brief put the packet in the Tx Fifo
+ * - LH_MSG_TYPE_GW_MSG_NO_ACK: the packet is sent once, no ack is awaited, nothing is reported
+ * - LH_MSG_TYPE_GW_MSG_ACK: the packet is sent up to MAX_RETRY_NO_VALID_ACK times, each try waiting
+ *   ACK_TIMEOUT ms for a NODE_ACK from the recipient carrying the same header counter. The outcome
+ *   (tries used, acked or not) is then reported to the host with a TYPE_SYS_TX_REPORT system packet.
+ * Any other message type keeps the retry behaviour, without report.
  *
  * @param packet lora home packet
  */
@@ -111,23 +116,58 @@ void LoRaHomeGateway::putPacket(uint8_t *packet)
   uint8_t raw_packet[LH_FRAME_MAX_SIZE];
   memcpy(raw_packet, packet, sizeof(LORA_HOME_PACKET_HEADER) + lora_packet->header.payloadSize);
   memcpy(&raw_packet[sizeof(LORA_HOME_PACKET_HEADER) + lora_packet->header.payloadSize], &(lora_packet->crc16), 2);
+
+  // no ack requested: send it once, do not wait
+  if (lora_packet->header.messageType == LH_MSG_TYPE_GW_MSG_NO_ACK)
+  {
+    xQueueSend(tx_packet_queue, raw_packet, 0);
+    return;
+  }
+
+  // drop any ack left over from a previous packet, so it cannot be mistaken for this one's
+  while (pdTRUE == xQueueReceive(rx_ack_packet_queue, ackBuffer, 0))
+  {
+  }
+
   // send the LoRaHome raw_packet and loop max retry if necessary
   do
   {
     xQueueSend(tx_packet_queue, raw_packet, 0);
-    BaseType_t anymsg = xQueueReceive(rx_ack_packet_queue, ackBuffer, pdMS_TO_TICKS(ACK_TIMEOUT));
-    if (pdTRUE == anymsg)
+    // wait up to ACK_TIMEOUT for the matching ack, ignoring acks that do not match this packet
+    TickType_t start = xTaskGetTickCount();
+    TickType_t timeout = pdMS_TO_TICKS(ACK_TIMEOUT);
+    TickType_t elapsed = 0;
+    while ((false == success) && (elapsed < timeout))
     {
-      LORA_HOME_PACKET *ack;
-      ack = (LORA_HOME_PACKET *)ackBuffer;
-      if ((ack->header.nodeIdEmitter == lora_packet->header.nodeIdRecipient) && (ack->header.counter == lora_packet->header.counter))
+      BaseType_t anymsg = xQueueReceive(rx_ack_packet_queue, ackBuffer, timeout - elapsed);
+      if (pdTRUE == anymsg)
       {
-        success = true;
+        LORA_HOME_PACKET *ack;
+        ack = (LORA_HOME_PACKET *)ackBuffer;
+        if ((ack->header.nodeIdEmitter == lora_packet->header.nodeIdRecipient) && (ack->header.counter == lora_packet->header.counter))
+        {
+          success = true;
+        }
       }
+      elapsed = xTaskGetTickCount() - start;
     }
     retry++;
     // loop if ack not received
   } while ((false == success) && (retry < MAX_RETRY_NO_VALID_ACK));
+
+  // report the radio outcome of the command to the host
+  if (lora_packet->header.messageType == LH_MSG_TYPE_GW_MSG_ACK)
+  {
+    DONGLE_TX_REPORT_PACKET_PAYLOAD packet_report;
+    packet_report.node_id = lora_packet->header.nodeIdRecipient;
+    packet_report.counter = lora_packet->header.counter;
+    packet_report.tries = retry;
+    packet_report.acked = success ? 1 : 0;
+    DONGLE_SYS_PACKET packet_sys;
+    packet_sys.sys_type = TYPE_SYS_TX_REPORT;
+    memcpy(packet_sys.payload, &packet_report, sizeof(DONGLE_TX_REPORT_PACKET_PAYLOAD));
+    serial_api_send_sys_packet((uint8_t *)&packet_sys, sizeof(packet_sys.sys_type) + sizeof(DONGLE_TX_REPORT_PACKET_PAYLOAD));
+  }
 }
 
 /**

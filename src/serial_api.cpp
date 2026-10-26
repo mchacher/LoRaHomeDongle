@@ -17,7 +17,23 @@
 
 
 static uint16_t _packet_id = 0x0000;
+static portMUX_TYPE _packet_id_mux = portMUX_INITIALIZER_UNLOCKED;
 QueueHandle_t sys_packet_queue;
+
+/**
+ * @brief get the next serial packet id
+ * serial packets are sent from several tasks (lora send / receive, sys, heartbeat timer),
+ * so the increment is done in a critical section
+ *
+ * @return uint16_t the packet id to use
+ */
+static uint16_t next_packet_id(void)
+{
+  portENTER_CRITICAL(&_packet_id_mux);
+  uint16_t id = _packet_id++;
+  portEXIT_CRITICAL(&_packet_id_mux);
+  return id;
+}
 
 /**
  * @brief send a log message over uart
@@ -27,7 +43,7 @@ QueueHandle_t sys_packet_queue;
 void serial_api_send_log_message(char *message)
 {
   SERIAL_PACKET_HEADER sph = {0};
-  sph.packet_id = _packet_id++;
+  sph.packet_id = next_packet_id();
   sph.type = SERIAL_MSG_TYPE_LOG;
   sph.data_length = strlen(message);
   SERIAL_PACKET sp = {0};
@@ -45,7 +61,7 @@ void serial_api_send_log_message(char *message)
 void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size)
 {
   SERIAL_PACKET_HEADER sph = {0};
-  sph.packet_id = _packet_id++;
+  sph.packet_id = next_packet_id();
   sph.type = SERIAL_MSG_TYPE_LORA_HOME;
   sph.data_length = size;
   SERIAL_PACKET sp = {0};
@@ -63,7 +79,7 @@ void serial_api_send_lora_home_packet(uint8_t *packet, uint8_t size)
 void serial_api_send_sys_packet(uint8_t *packet, uint8_t size)
 {
   SERIAL_PACKET_HEADER sph = {0};
-  sph.packet_id = _packet_id++;
+  sph.packet_id = next_packet_id();
   sph.type = SERIAL_MSG_TYPE_SYS;
   sph.data_length = size;
   SERIAL_PACKET sp = {0};
