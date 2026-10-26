@@ -102,6 +102,8 @@ void LoRaHomeGateway::setNetworkID(uint16_t network_id)
  *   ACK_TIMEOUT ms for a NODE_ACK from the recipient carrying the same header counter. The outcome
  *   (tries used, acked or not) is then reported to the host with a TYPE_SYS_TX_REPORT system packet.
  * Any other message type keeps the retry behaviour, without report.
+ * A packet that cannot be put on the LoRa tx queue (queue full) increments err_counter and does not
+ * count as a try, so the reported tries are real transmissions (0 if the packet never left).
  *
  * @param packet lora home packet
  */
@@ -109,7 +111,8 @@ void LoRaHomeGateway::putPacket(uint8_t *packet)
 {
   bool success = false;
   uint8_t ackBuffer[LH_FRAME_ACK_SIZE];
-  uint8_t retry = 0;
+  uint8_t retry = 0; // loop iterations, bounded by MAX_RETRY_NO_VALID_ACK
+  uint8_t tries = 0; // packets actually put on the LoRa tx queue
   LORA_HOME_PACKET *lora_packet = (LORA_HOME_PACKET *)packet;
   lora_packet->crc16 = crc16_ccitt(packet, sizeof(LORA_HOME_PACKET_HEADER) + lora_packet->header.payloadSize);
 
@@ -120,7 +123,10 @@ void LoRaHomeGateway::putPacket(uint8_t *packet)
   // no ack requested: send it once, do not wait
   if (lora_packet->header.messageType == LH_MSG_TYPE_GW_MSG_NO_ACK)
   {
-    xQueueSend(tx_packet_queue, raw_packet, 0);
+    if (pdTRUE != xQueueSend(tx_packet_queue, raw_packet, 0))
+    {
+      err_counter++;
+    }
     return;
   }
 
@@ -132,7 +138,15 @@ void LoRaHomeGateway::putPacket(uint8_t *packet)
   // send the LoRaHome raw_packet and loop max retry if necessary
   do
   {
-    xQueueSend(tx_packet_queue, raw_packet, 0);
+    if (pdTRUE == xQueueSend(tx_packet_queue, raw_packet, 0))
+    {
+      tries++;
+    }
+    else
+    {
+      // LoRa tx queue full: not a transmission, the wait below gives the LoRa task time to drain it
+      err_counter++;
+    }
     // wait up to ACK_TIMEOUT for the matching ack, ignoring acks that do not match this packet
     TickType_t start = xTaskGetTickCount();
     TickType_t timeout = pdMS_TO_TICKS(ACK_TIMEOUT);
@@ -161,7 +175,7 @@ void LoRaHomeGateway::putPacket(uint8_t *packet)
     DONGLE_TX_REPORT_PACKET_PAYLOAD packet_report;
     packet_report.node_id = lora_packet->header.nodeIdRecipient;
     packet_report.counter = lora_packet->header.counter;
-    packet_report.tries = retry;
+    packet_report.tries = tries;
     packet_report.acked = success ? 1 : 0;
     DONGLE_SYS_PACKET packet_sys;
     packet_sys.sys_type = TYPE_SYS_TX_REPORT;

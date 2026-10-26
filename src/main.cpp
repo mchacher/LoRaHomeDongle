@@ -224,7 +224,7 @@ void setup()
   // create tasks
   xTaskCreate(task_uart_rx, "task_uart_rx", 2048, NULL, 1, NULL);
   xTaskCreate(task_uart_tx, "task_uart_tx", 2048, NULL, 1, NULL);
-  xTaskCreate(task_lora_home_send, "task_lora_home_send", 2048, NULL, 1, NULL);
+  xTaskCreate(task_lora_home_send, "task_lora_home_send", 3072, NULL, 1, NULL);
   xTaskCreate(task_lora_home_receive, "task_lora_home_receive", 2048, NULL, 1, NULL);
   xTaskCreate(task_sys_dongle, "task_sys_dongle", 2048, NULL, 1, NULL);
   xTimerDisplayRefresh = xTimerCreate("timer_heartbeat", pdMS_TO_TICKS(DISPLAY_TIMEOUT_REFRESH), pdTRUE, 0, timer_heartbeat);

@@ -109,7 +109,7 @@ typedef struct __attribute__((__packed__))
  * sent once the dongle is done with a command requesting an ack (LH_MSG_TYPE_GW_MSG_ACK)
  * - node_id: recipient node id of the command
  * - counter: lora home header counter of the command (little-endian)
- * - tries: number of transmissions used (1 to MAX_RETRY_NO_VALID_ACK)
+ * - tries: number of transmissions used (1 to MAX_RETRY_NO_VALID_ACK, 0 if the LoRa tx queue was always full)
  * - acked: 1 if a matching NODE_ACK was received, 0 otherwise
  *
  * @return typedef struct
